@@ -1,5 +1,4 @@
-
-import type { Review, ColumnMapping } from './types';
+import type { ColumnMapping, Review } from './types';
 
 export function sponsored(text: string): boolean {
   return /쿠팡\s*체험단|상품을\s*무료로\s*제공받|무료\s*제공.*구매후기/.test(text);
@@ -7,7 +6,7 @@ export function sponsored(text: string): boolean {
 
 export function normalizeReviews(
   rows: string[][],
-  mapping: ColumnMapping
+  mapping: ColumnMapping,
 ): { reviews: Review[]; skipped: number } {
   const seen = new Set<string>();
   const reviews: Review[] = [];
@@ -15,14 +14,11 @@ export function normalizeReviews(
 
   for (const row of rows.slice(1)) {
     const text = (row[mapping.text] || '').trim();
-
     if (!text || seen.has(text)) {
       skipped++;
       continue;
     }
-
     seen.add(text);
-
     reviews.push({
       id: reviews.length,
       text,
@@ -32,6 +28,5 @@ export function normalizeReviews(
       sponsored: sponsored(text),
     });
   }
-
   return { reviews, skipped };
 }
