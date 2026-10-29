@@ -1,20 +1,105 @@
 'use client';
 import {useState,useMemo,useRef} from 'react';
 import {ArrowUpRight,Upload,Search,SlidersHorizontal,FlaskConical,FileText,ChevronRight,X,Check,KeyRound,Download,MessageSquare,BarChart3,Layers,ArrowRight} from 'lucide-react';
-type Review={id:number,text:string,rating:string,date:string,option:string,sponsored:boolean};
-type Result={id:number,theme:string,subtheme:string,sentiment:string,evidence:string};
+
+import type { Review, Result, Theme } from '../lib/types';
+import { parseCSV } from '../lib/csv';
+import { sponsored, normalizeReviews } from '../lib/review';
+
 const sentiments=['긍정','부정','혼합','중립'];
 const demoTexts=['배터리는 하루 종일 가서 좋은데, 한 시간만 끼면 귀가 아파요.','지하철에서 연결이 자꾸 끊겨요. 집에서는 잘 됩니다.','가볍고 귀에 편해요. 오래 끼고 공부하기 좋아요.','통화할 때 제 목소리가 작게 들린대요.','충전을 자주 안 해도 돼서 만족합니다.','운동하면 귀에서 빠져요.','음질이 선명하고 저음이 좋아요.','케이스에 넣어도 한쪽이 충전이 안 됩니다.','기기 전환이 빠르고 연결이 안정적이에요.','쿠팡체험단 이벤트로 상품을 무료로 제공받아 작성한 구매후기입니다. 착용감이 편하고 음질이 좋아요.','바람 부는 곳에서는 통화가 어려워요.','베개에 귀가 눌려서 누워서 사용하기 불편해요.','배터리 사용 시간은 5시간 정도입니다.','음질은 좋은데 저음이 너무 강해요.','케이스에 흠집이 쉽게 생겨요.','가격 대비 소리가 좋아요.'];
 const demoSpecs=[['배터리','사용 시간','긍정','배터리는 하루 종일 가서 좋은데'],['착용감','장시간 착용','부정','한 시간만 끼면 귀가 아파요.'],['연결 안정성','이동 중 연결','혼합','지하철에서 연결이 자꾸 끊겨요. 집에서는 잘 됩니다.'],['착용감','장시간 착용','긍정','가볍고 귀에 편해요.'],['통화 품질','목소리 전달','부정','제 목소리가 작게 들린대요.'],['배터리','사용 시간','긍정','충전을 자주 안 해도 돼서 만족합니다.'],['착용감','고정력','부정','운동하면 귀에서 빠져요.'],['음질','선명도','긍정','음질이 선명하고 저음이 좋아요.'],['배터리','충전 불량','부정','한쪽이 충전이 안 됩니다.'],['연결 안정성','기기 전환','긍정','기기 전환이 빠르고 연결이 안정적이에요.'],['착용감','편안함','긍정','착용감이 편하고'],['통화 품질','바람 소음','부정','바람 부는 곳에서는 통화가 어려워요.'],['착용감','누워서 착용','부정','누워서 사용하기 불편해요.'],['배터리','사용 시간','중립','배터리 사용 시간은 5시간 정도입니다.'],['음질','저음','혼합','음질은 좋은데 저음이 너무 강해요.'],['내구성','케이스 흠집','부정','케이스에 흠집이 쉽게 생겨요.'],['음질','가격 대비 음질','긍정','가격 대비 소리가 좋아요.']];
-function parseCSV(s:string){s=s.replace(/^\uFEFF/,'');const delim=s.split('\n')[0].includes('\t')?'\t':',';let rows:string[][]=[],row:string[]=[],cell='',quoted=false;for(let i=0;i<s.length;i++){let c=s[i];if(c==='"'){if(quoted&&s[i+1]==='"'){cell+='"';i++}else quoted=!quoted}else if(c===delim&&!quoted){row.push(cell);cell=''}else if((c==='\n'||c==='\r')&&!quoted){if(c==='\r'&&s[i+1]==='\n')i++;row.push(cell);if(row.some(v=>v.trim()))rows.push(row);row=[];cell=''}else cell+=c}if(quoted)throw Error('따옴표가 닫히지 않은 CSV입니다.');row.push(cell);if(row.some(v=>v.trim()))rows.push(row);return rows}
-const sponsored=(t:string)=>/쿠팡\s*체험단|상품을\s*무료로\s*제공받|무료\s*제공.*구매후기/.test(t);
-export default function Home(){const [reviews,setReviews]=useState<Review[]>([]),[results,setResults]=useState<Result[]>([]),[themes,setThemes]=useState<any[]>([]),[file,setFile]=useState(''),[rows,setRows]=useState<string[][]>([]),[mapping,setMapping]=useState({text:0,rating:-1,date:-1,option:-1}),[exclude,setExclude]=useState(true),[theme,setTheme]=useState('전체'),[sentiment,setSentiment]=useState('전체'),[query,setQuery]=useState(''),[sort,setSort]=useState('기본순'),[key,setKey]=useState(''),[settings,setSettings]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[mode,setMode]=useState(''),[page,setPage]=useState(1);const input=useRef<HTMLInputElement>(null);const list=useRef<HTMLDivElement>(null);
+export default function Home(){const [reviews,setReviews]=useState<Review[]>([]),[results,setResults]=useState<Result[]>([]),[themes,setThemes]=useState<Theme[]>([]),[file,setFile]=useState(''),[rows,setRows]=useState<string[][]>([]),[mapping,setMapping]=useState({text:0,rating:-1,date:-1,option:-1}),[exclude,setExclude]=useState(true),[theme,setTheme]=useState('전체'),[sentiment,setSentiment]=useState('전체'),[query,setQuery]=useState(''),[sort,setSort]=useState('기본순'),[key,setKey]=useState(''),[settings,setSettings]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[mode,setMode]=useState(''),[page,setPage]=useState(1);const input=useRef<HTMLInputElement>(null);const list=useRef<HTMLDivElement>(null);
  const active=useMemo(()=>reviews.filter(r=>!exclude||!r.sponsored),[reviews,exclude]);const ids=new Set(active.map(r=>r.id));const filteredResults=results.filter(r=>ids.has(r.id));const stats=themes.map(t=>({...t,items:filteredResults.filter(r=>r.theme===t.name)})).filter(t=>t.items.length).sort((a,b)=>b.items.length-a.items.length);
  let shown=active.filter(r=>r.text.toLowerCase().includes(query.toLowerCase())&&(theme==='전체'?(sentiment==='전체'||filteredResults.some(v=>v.id===r.id&&v.sentiment===sentiment)):filteredResults.some(v=>v.id===r.id&&v.theme===theme&&(sentiment==='전체'||v.sentiment===sentiment))));if(sort==='낮은 별점순')shown.sort((a,b)=>(Number(a.rating)||6)-(Number(b.rating)||6));if(sort==='최신순')shown.sort((a,b)=>(Date.parse(b.date)||0)-(Date.parse(a.date)||0));
  function demo(){setReviews(demoTexts.map((text,id)=>({id,text,rating:['3','2','5','2','5'][id%5],date:`2026-10-${String(id+1).padStart(2,'0')}`,option:'무선 이어폰 · 화이트',sponsored:sponsored(text)})));setResults(demoSpecs.map((v,i)=>({id:i<2?0:i-1,theme:v[0],subtheme:v[1],sentiment:v[2],evidence:v[3]})));setThemes([...new Set(demoSpecs.map(v=>v[0]))].map(name=>({name})));setMode('예시 데이터');setFile('무선 이어폰 리뷰 · 기능 시연용');setRows([]);setError('');setNotice('설명용 가상 리뷰와 미리 작성한 분석 결과입니다.');setTheme('전체');setSentiment('전체');setQuery('');setPage(1)}
  async function load(f:File){setError('');try{if(f.size>5*1024*1024)throw Error('5MB 이하 CSV를 선택해 주세요.');let buf=await f.arrayBuffer(),text=new TextDecoder().decode(buf);if(text.includes('\uFFFD'))text=new TextDecoder('euc-kr').decode(buf);const data=parseCSV(text);if(data.length<2)throw Error('열 이름과 리뷰가 포함된 CSV가 필요합니다.');setRows(data);setFile(f.name);const find=(re:RegExp)=>data[0].findIndex(h=>re.test(h));setMapping({text:Math.max(0,find(/본문|내용|리뷰|text|content|review/i)),rating:find(/별점|평점|rating|score/i),date:find(/날짜|작성일|date/i),option:find(/옵션|option/i)});}catch(e:any){setError(e.message)}}
- function importRows(){const seen=new Set();let skipped=0;const arr:Review[]=[];for(const row of rows.slice(1)){const text=(row[mapping.text]||'').trim();if(!text||seen.has(text)){skipped++;continue}seen.add(text);arr.push({id:arr.length,text,rating:row[mapping.rating]||'',date:row[mapping.date]||'',option:row[mapping.option]||'',sponsored:sponsored(text)})}if(!arr.length){setError('선택한 본문 열에 리뷰가 없습니다.');return}setReviews(arr);setResults([]);setThemes([]);setMode('업로드 데이터');setRows([]);setTheme('전체');setSentiment('전체');setQuery('');setPage(1);setNotice(`${arr.length}건을 불러왔어요. 빈 본문·중복 ${skipped}건 제외. AI 분석 전에도 필터와 검색을 사용할 수 있어요.`)}
- async function analyze(){if(!key){setSettings(true);return}setError('');setBusy(true);try{if(reviews.length>100||reviews.some(r=>r.text.length>4000))throw Error('이번 버전은 최대 100건, 리뷰당 4,000자까지 AI 분석합니다.');const resp=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key,reviews:reviews.map(({id,text})=>({id,text}))})});const d=await resp.json();if(!resp.ok)throw Error(d.error);setResults(d.results);setThemes(d.themes);setMode('AI 분석 완료');setNotice(`원문 근거를 검증한 분석 ${d.results.length}건${d.dropped?` · 근거 불일치 ${d.dropped}건 제외`:''}. 체험단 스위치는 집계 대상을 변경합니다.`)}catch(e:any){setError(e.message)}finally{setBusy(false)}}
+
+function importRows() {
+  const { reviews: arr, skipped } = normalizeReviews(
+    rows,
+    mapping
+  );
+
+  if (!arr.length) {
+    setError('선택한 본문 열에 리뷰가 없습니다.');
+    return;
+  }
+
+  setReviews(arr);
+  setResults([])
+  setThemes([]);
+  setMode('업로드 데이터');
+  setRows([]);
+  setTheme('전체');
+  setSentiment('전체');
+  setQuery('');
+  setPage(1);
+
+  setNotice(
+    `${arr.length}건을 불러왔어요. 빈 본문·중복 ${skipped}건 제외. AI 분석 전에도 필터와 검색을 사용할 수 있어요.`
+  );
+}
+
+async function analyze() {
+  if (!key) {
+    setSettings(true);
+    return;
+  }
+
+  setError('');
+  setBusy(true);
+
+  try {
+    if (
+      reviews.length > 100 ||
+      reviews.some(r => r.text.length > 4000)
+    ) {
+      throw Error(
+        '이번 버전은 최대 100건, 리뷰당 4,000자까지 AI 분석합니다.'
+      );
+    }
+
+    const resp = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        key,
+        reviews: reviews.map(({ id, text }) => ({ id, text }))
+      })
+    });
+
+    const d = (await resp.json()) as {
+      error?: string;
+      results: Result[];
+      themes: Theme[];
+      dropped?: number;
+    };
+
+    if (!resp.ok) {
+      throw Error(d.error || 'AI 분석 요청에 실패했습니다.');
+    }
+
+    setResults(d.results);
+    setThemes(d.themes);
+    setMode('AI 분석 완료');
+
+    setNotice(
+      `원문 근거를 검증한 분석 ${d.results.length}건${
+        d.dropped
+          ? ` · 근거 불일치 ${d.dropped}건 제외`
+          : ''
+      }. 체험단 스위치는 집계 대상을 변경합니다.`
+    );
+  } catch (e: any) {
+    setError(e.message);
+  } finally {
+    setBusy(false);
+  }
+}
+
  function select(t:string,s='전체'){setTheme(t);setSentiment(s);setPage(1);list.current?.scrollIntoView({behavior:'smooth',block:'start'})}
  function highlight(text:string,evidence:string){const needle=query||evidence;if(!needle)return text;const i=text.toLowerCase().indexOf(needle.toLowerCase());if(i<0)return text;return <>{text.slice(0,i)}<mark>{text.slice(i,i+needle.length)}</mark>{text.slice(i+needle.length)}</>}
  function sample(){const blob=new Blob(['\uFEFF리뷰,별점,작성일,옵션\n'+demoTexts.map((t,i)=>`"${t}",${i%2?3:5},2026-10-01,화이트`).join('\n')],{type:'text/csv;charset=utf-8'});const u=URL.createObjectURL(blob);const a=document.createElement('a');a.href=u;a.download='demandlab_sample.csv';a.click();URL.revokeObjectURL(u)}
