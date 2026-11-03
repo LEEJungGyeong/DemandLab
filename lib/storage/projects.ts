@@ -66,12 +66,12 @@ export async function saveProject(project: ProductProject): Promise<void> {
   // Explicit allowlist excludes UI state, API keys and arbitrary extra properties.
   const { id, name, productName, productDescription, strengths, targetCustomers,
     useSituations, evaluationItems, analysisInputVersion, analyzedInputVersion, guideInputVersion,
-    workspace, guide, submittedReviews, inspections, createdAt, updatedAt } = project;
+    workspace, guide, reviewComposition, submittedReviews, inspections, createdAt, updatedAt } = project;
   const { reviews, results, themes, file, rows, mapping, exclude, mode, notice, analysisMetadata } = workspace;
   tx.objectStore(PROJECTS).put({ id, name, productName, productDescription, strengths,
     targetCustomers, useSituations, evaluationItems, analysisInputVersion, analyzedInputVersion, guideInputVersion,
     workspace: { reviews, results, themes, file, rows, mapping, exclude, mode, notice, analysisMetadata },
-    guide, submittedReviews, inspections, createdAt, updatedAt });
+    guide, reviewComposition, submittedReviews, inspections, createdAt, updatedAt });
   tx.objectStore(SETTINGS).put(id, 'activeProjectId');
   await done;
 }

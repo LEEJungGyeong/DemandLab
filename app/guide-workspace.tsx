@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import { ArrowLeft, Check, Clipboard, Download, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import type { AISettings } from '../lib/ai/types';
 import type { ProductProject, ReviewGuide, ReviewGuideTestItem } from '../lib/types';
+import ReviewDraftComposer from './review-draft-composer';
 import {
   buildGuideGenerationInput, formatReviewGuideMarkdown, formatReviewGuideText, isReviewGuideStale,
 } from '../lib/guide';
@@ -19,6 +20,9 @@ type Props = {
   saveNow: () => Promise<void>;
   storageStatus: string;
   storageError: string;
+  onSaveComposition: (projectId: string, value: NonNullable<ProductProject['reviewComposition']>) => boolean;
+  onAddComposedReview: (projectId: string, text: string) => boolean;
+  onOpenInspection: () => void;
 };
 
 const splitLines = (value: string) => value.split('\n').map(line => line.trim()).filter(Boolean);
@@ -33,10 +37,15 @@ function isGuide(value: unknown): value is ReviewGuide {
 
 export default function GuideWorkspace({
   project, settings, apiKey, settingsReady, onOpenSettings, onBack, onSaveGuide,
-  saveNow, storageStatus, storageError,
+  saveNow, storageStatus, storageError, onSaveComposition, onAddComposedReview, onOpenInspection,
 }: Props) {
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
+  const [failure, setFailure] = useState({ message: '', provider: settings.provider, model: settings.models[settings.provider] });
+  const error = failure.provider === settings.provider && failure.model === settings.models[settings.provider]
+    ? failure.message : '';
+  function setError(message: string) {
+    setFailure({ message, provider: settings.provider, model: settings.models[settings.provider] });
+  }
   const [message, setMessage] = useState('');
   const busyRef = useRef(false);
 
@@ -236,6 +245,7 @@ export default function GuideWorkspace({
             : 'OpenAI API가 프로젝트 입력을 바탕으로 가이드 초안을 생성합니다. 사용량에 따라 비용이 발생할 수 있습니다.'}</small>
         </div>
         <div className="guide-generation-actions">
+          {project ? <a className="plain" href="#review-draft-title">상품 강점으로 리뷰 작성</a> : null}
           <button className="plain" type="button" onClick={onOpenSettings}>AI 연결 설정</button>
           <button className="primary" type="button" disabled={!ready || busy || !settingsReady} onClick={() => void generate()}>
             {busy ? 'AI가 안전한 테스트 항목을 구성하고 있어요…'
@@ -334,6 +344,10 @@ export default function GuideWorkspace({
           <small role="status">저장 상태: {storageStatus}</small>
         </section>
       </section>}
+
+      {project ? <ReviewDraftComposer key={project.id} project={project}
+        settings={settings} apiKey={apiKey} onOpenSettings={onOpenSettings}
+        onSave={onSaveComposition} onAdd={onAddComposedReview} onOpenInspection={onOpenInspection} /> : null}
 
       {project?.guide && !guide && <section className="dashboard-card guide-editor">
         <div className="stale-notice" role="status">이전에 저장된 가이드 형식입니다. 원본은 유지되며, 새 가이드를 생성할 때만 확인 후 교체합니다.</div>

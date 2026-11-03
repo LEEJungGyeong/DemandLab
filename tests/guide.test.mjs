@@ -197,6 +197,14 @@ test('guide input uses persisted review evidence and excludes demo analysis', ()
     },
   };
   const guideInput = buildGuideGenerationInput(project);
+  const editingProject = { ...project,
+    strengths: ['  긴 배터리 사용 시간 ', '', '편안한 착용감', ' '],
+    useSituations: [' 출퇴근 중 ', ''],
+  };
+  const cleaned = buildGuideGenerationInput(editingProject);
+  assert.deepEqual(cleaned.product.emphasizedStrengths, ['긴 배터리 사용 시간', '편안한 착용감']);
+  assert.deepEqual(cleaned.product.useSituations, ['출퇴근 중']);
+  assert.equal(editingProject.strengths[0], '  긴 배터리 사용 시간 ');
   assert.equal(guideInput.existingReviewAnalysis.topics[0].positive, 1);
   assert.equal(guideInput.existingReviewAnalysis.topics[0].evidence[0].quote, '배터리가 오래가요');
   assert.equal(isReviewGuideStale({ sourceVersion: 4 }, project), false);

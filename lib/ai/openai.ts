@@ -3,6 +3,7 @@ import type {
   ReviewCheckRequest,
 } from './types';
 import { AIServiceError, toAIServiceError } from './errors';
+import { reviewDraftPrompt, parseReviewDraftResponse, reviewDraftContext } from './review-draft';
 import {
   GUIDE_GENERATION_SYSTEM_PROMPT, parseGuideGenerationResponse, parseReviewAnalysisResponse,
   parseReviewCheckResponse, REVIEW_ANALYSIS_SYSTEM_PROMPT, REVIEW_CHECK_SYSTEM_PROMPT,
@@ -54,6 +55,18 @@ export function createOpenAIProvider(config: AIProviderConfig): AIProvider {
   return {
     kind: 'openai',
     model,
+    async draftReview(input) {
+      const response = await openAIRequest('/chat/completions', apiKey, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, temperature: 0.2, response_format: { type: 'json_object' },
+          messages: [{ role: 'system', content: reviewDraftPrompt(input) },
+            { role: 'user', content: JSON.stringify(reviewDraftContext(input)) }] }),
+      }, 90000);
+      const data = await response.json() as { choices?: { message?: { content?: unknown } }[] };
+      const content = data?.choices?.[0]?.message?.content;
+      if (typeof content !== 'string') throw new AIServiceError('invalid-response');
+      return parseReviewDraftResponse(content, input);
+    },
     async listModels() {
       const response = await openAIRequest('/models', apiKey);
       const data: unknown = await response.json().catch(() => null);

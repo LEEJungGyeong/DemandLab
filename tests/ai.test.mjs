@@ -138,6 +138,9 @@ test('analyze endpoint routes Ollama requests through the fixed local provider',
     assert.equal(result.status, 200);
     assert.equal(data.metadata.provider, 'ollama');
     assert.equal(data.metadata.model, 'qwen2.5:7b');
+    const sent = JSON.parse(calls.find(call => call.url.endsWith('/api/chat')).init.body);
+    assert.deepEqual(sent.format.properties.results.items.properties.id.enum, [reviews[1].id]);
+    assert.ok(sent.format.required.includes('themes'));
     assert.ok(calls.every(call => call.url.startsWith('http://127.0.0.1:11434/')));
   } finally {
     globalThis.fetch = originalFetch;

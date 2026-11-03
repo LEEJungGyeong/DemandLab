@@ -41,7 +41,7 @@ const demoTexts = [
   '가격 대비 소리가 좋아요.',
 ];
 function splitLines(value: string): string[] {
-  return value.split('\n').map(item => item.trim()).filter(Boolean);
+  return value.split('\n');
 }
 
 function newEvaluationItem(title: string): EvaluationItem {
@@ -206,9 +206,10 @@ export default function Home() {
     return true;
   }
 
-  async function deleteProjectById(id: string, name: string) {
-    if (!window.confirm(`“${name}” 프로젝트와 저장된 리뷰·가이드·검수 결과를 삭제할까요?`)) return;
-    if (await storage.removeProject(id)) resetView();
+  async function deleteProjectById(id: string) {
+    const removed = await storage.removeProject(id);
+    if (removed) resetView();
+    return removed;
   }
 
   async function renameProjectById(id: string, name: string) {
@@ -322,7 +323,7 @@ export default function Home() {
       }
       const models = Array.isArray(data.models) ? data.models.filter(item => typeof item === 'string') : [];
       setAvailableModels(models);
-      if (aiSettings.provider === 'ollama' && (!models.length || !data.modelAvailable)) {
+      if (aiSettings.provider === 'ollama' && (!models.length || !aiSettings.models.ollama || !data.modelAvailable)) {
         setConnectionState('model-missing');
         setConnectionMessage(models.length
           ? 'Ollama는 연결되었지만 선택한 모델이 없습니다. 설치된 모델을 선택해 주세요.'
@@ -634,6 +635,9 @@ export default function Home() {
           onOpenSettings={() => setSettings(true)}
           onBack={() => navigateToStep(2)}
           onSaveGuide={storage.updateGuideForProject}
+          onSaveComposition={storage.saveReviewComposition}
+          onAddComposedReview={storage.addComposedReview}
+          onOpenInspection={() => navigateToStep(4)}
           saveNow={storage.saveNow}
           storageStatus={storage.status}
           storageError={storage.storageError}
@@ -1024,7 +1028,7 @@ export default function Home() {
               Cloudflare Worker 배포 환경의 localhost는 사용자 컴퓨터를 가리키지 않습니다.</small>
             <label>설치된 모델
               <select value={aiSettings.models.ollama} onChange={event => updateAISettings({ model: event.target.value })}>
-                {!availableModels.length && <option value="">모델 목록을 먼저 조회하세요</option>}
+                <option value="">{availableModels.length ? '사용할 모델을 선택하세요' : '모델 목록을 먼저 조회하세요'}</option>
                 {aiSettings.models.ollama && !availableModels.includes(aiSettings.models.ollama)
                   && <option value={aiSettings.models.ollama}>{aiSettings.models.ollama} · 목록에 없음</option>}
                 {availableModels.map(model => <option key={model} value={model}>{model}</option>)}

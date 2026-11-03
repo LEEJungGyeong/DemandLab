@@ -157,10 +157,25 @@ export type ProductProject = {
   analyzedInputVersion?: number;
   guideInputVersion: number;
   guide?: ReviewGuide;
+  reviewComposition?: ReviewComposition;
   submittedReviews: ReviewSubmission[];
   inspections: ReviewInspection[];
   createdAt: string;
   updatedAt: string;
+};
+
+export type ReviewComposition = {
+  mode?: 'experience' | 'guide-example';
+  experience: string;
+  techniques: import('./ai/review-draft').RhetoricalTechnique[];
+  relationship: import('./ai/review-draft').ReviewDraftInput['relationship'] | '';
+  text: string;
+  generatedText?: string;
+  sentences?: import('./ai/review-draft').ReviewDraftSentence[];
+  signature?: string;
+  generatedAt?: string;
+  provider?: 'openai' | 'ollama';
+  model?: string;
 };
 
 export type ProjectSummary = Pick<ProductProject,
