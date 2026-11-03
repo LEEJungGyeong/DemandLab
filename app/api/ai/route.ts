@@ -23,22 +23,24 @@ export async function POST(request: Request): Promise<Response> {
     if (!body || typeof body !== 'object') throw new AIServiceError('invalid-request', 400);
     const { action, provider, model, key } = body as SettingsRequest;
     if ((action !== 'test' && action !== 'models')
-      || (provider !== 'openai' && provider !== 'ollama')
+      || (provider !== 'openai' && provider !== 'ollama' && provider !== 'gemini')
       || (model !== undefined && (typeof model !== 'string' || model.length > 200))) {
       throw new AIServiceError('invalid-request', 400);
     }
 
     const selectedProvider = provider as AIProviderKind;
-    const apiKey = selectedProvider === 'openai' ? key : undefined;
+    const apiKey = selectedProvider !== 'ollama' ? key : undefined;
     const selectedModel = typeof model === 'string'
       ? model
-      : selectedProvider === 'openai'
-        ? DEFAULT_AI_SETTINGS.models.openai
-        : DEFAULT_AI_SETTINGS.models.ollama;
+      : DEFAULT_AI_SETTINGS.models[selectedProvider];
     const aiProvider = createAIProvider(selectedProvider, {
       model: selectedModel,
       ...(typeof apiKey === 'string' ? { apiKey } : {}),
     });
+    if (selectedProvider === 'gemini' && action === 'test') {
+      await aiProvider.testConnection!();
+      return json({ provider: selectedProvider, models: [aiProvider.model], modelAvailable: true });
+    }
     const models = await aiProvider.listModels();
     return json({
       provider: selectedProvider,

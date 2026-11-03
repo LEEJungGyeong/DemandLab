@@ -12,13 +12,15 @@ export async function loadAISettings(): Promise<AISettings> {
 
   if (!stored || typeof stored !== 'object') return DEFAULT_AI_SETTINGS;
   const value = stored as Partial<AISettings>;
-  const provider = value.provider === 'ollama' ? 'ollama' : 'openai';
+  const provider = value.provider === 'gemini' ? 'gemini' : value.provider === 'ollama' ? 'ollama' : 'openai';
   const models: Partial<AISettings['models']> = value.models && typeof value.models === 'object'
     ? value.models
     : {};
   return {
     provider,
     models: {
+      gemini: typeof models.gemini === 'string' && models.gemini.trim() && models.gemini.length <= 200
+        ? models.gemini : DEFAULT_AI_SETTINGS.models.gemini,
       openai: typeof models.openai === 'string' && models.openai.length <= 100
         ? models.openai
         : DEFAULT_AI_SETTINGS.models.openai,
@@ -31,8 +33,9 @@ export async function loadAISettings(): Promise<AISettings> {
 
 export async function saveAISettings(settings: AISettings): Promise<void> {
   const safeSettings: AISettings = {
-    provider: settings.provider === 'ollama' ? 'ollama' : 'openai',
+    provider: settings.provider === 'gemini' ? 'gemini' : settings.provider === 'ollama' ? 'ollama' : 'openai',
     models: {
+      gemini: settings.models.gemini.slice(0, 200),
       openai: settings.models.openai.slice(0, 100),
       ollama: settings.models.ollama.slice(0, 200),
     },

@@ -4,6 +4,7 @@ import { validateReviewAnalysisRequest } from '../../../lib/ai/schemas';
 import { DEFAULT_AI_SETTINGS, type AIProviderKind } from '../../../lib/ai/types';
 
 type AnalyzeRequest = {
+  stream?: unknown;
   key?: unknown;
   provider?: unknown;
   model?: unknown;
@@ -22,9 +23,9 @@ export async function POST(request: Request): Promise<Response> {
   try {
     const body: unknown = await request.json();
     if (!body || typeof body !== 'object') throw new AIServiceError('invalid-request', 400);
-    const { key, provider, model, reviews } = body as AnalyzeRequest;
+    const { key, provider, model, reviews, stream } = body as AnalyzeRequest;
     const selectedProvider = provider === undefined ? 'openai' : provider;
-    if (selectedProvider !== 'openai' && selectedProvider !== 'ollama') {
+    if (selectedProvider !== 'openai' && selectedProvider !== 'ollama' && selectedProvider !== 'gemini') {
       throw new AIServiceError('invalid-request', 400);
     }
     if (model !== undefined && (typeof model !== 'string' || model.length > 200
@@ -41,13 +42,32 @@ export async function POST(request: Request): Promise<Response> {
     });
     const selectedModel = typeof model === 'string'
       ? model.trim()
-      : selectedProvider === 'openai'
-        ? DEFAULT_AI_SETTINGS.models.openai
-        : '';
+      : DEFAULT_AI_SETTINGS.models[selectedProvider];
     const aiProvider = createAIProvider(selectedProvider as AIProviderKind, {
       model: selectedModel,
       ...(typeof key === 'string' ? { apiKey: key } : {}),
     });
+    if (selectedProvider === 'gemini' && stream === true) {
+      const encoder = new TextEncoder();
+      let cancelled = false;
+      const body = new ReadableStream({
+        async start(controller) {
+          const send = (value: unknown) => { if (!cancelled) controller.enqueue(encoder.encode(JSON.stringify(value) + '\n')); };
+          try {
+            const analysis = await aiProvider.analyzeReviews(analysisRequest, (completed, total) => {
+              if (cancelled || request.signal.aborted) throw new AIServiceError('network-error', 499);
+              send({ type: 'progress', completed, total });
+            });
+            send({ type: 'result', data: { ...analysis, metadata: { provider: aiProvider.kind, model: aiProvider.model, analyzedAt: new Date().toISOString() } } });
+          } catch (error) {
+            const failure = toAIServiceError(error);
+            send({ type: 'error', error: failure.message, code: failure.code });
+          } finally { if (!cancelled) controller.close(); }
+        },
+        cancel() { cancelled = true; },
+      });
+      return new Response(body, { headers: { 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' } });
+    }
     const analysis = await aiProvider.analyzeReviews(analysisRequest);
     return json({
       themes: analysis.themes,

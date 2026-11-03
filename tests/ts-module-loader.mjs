@@ -2,6 +2,8 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import ts from 'typescript';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
 
 const cache = new Map();
 
@@ -20,6 +22,7 @@ export async function loadTypeScriptModule(relativePath) {
     const dependencyUrl = await loadTypeScriptModule(pathToFileURL(dependencyPath).href);
     moduleSource = moduleSource.replace(`from ${quote}${specifier}${quote}`, `from '${dependencyUrl}'`);
   }
+  moduleSource = moduleSource.replace(/from (['"])(@google\/genai)\1/g, (_, quote, name) => `from '${pathToFileURL(require.resolve(name)).href}'`);
   const url = `data:text/javascript;base64,${Buffer.from(moduleSource).toString('base64')}`;
   cache.set(filename, url);
   return url;

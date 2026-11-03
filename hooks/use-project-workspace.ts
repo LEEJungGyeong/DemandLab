@@ -121,14 +121,16 @@ export function useProjectWorkspace() {
     mode: string;
     notice: string;
     analysisMetadata?: ProductProject['workspace']['analysisMetadata'];
-  }) {
-    if (!current.current) return;
+  }, expected?: { projectId: string; inputVersion: number }) {
+    if (!current.current || (expected && (current.current.id !== expected.projectId
+      || (current.current.analysisInputVersion ?? 0) !== expected.inputVersion))) return false;
     const next = recordProjectAnalysis(current.current, analysis);
     edit({
       workspace: next.workspace,
       analyzedInputVersion: next.analyzedInputVersion,
       guideInputVersion: (current.current.guideInputVersion ?? 0) + 1,
     });
+    return true;
   }
 
   function saveReviewInputs(reviews: ReviewSubmission[]) {
