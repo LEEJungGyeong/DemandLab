@@ -44,9 +44,9 @@ export function buildGuideGenerationInput(project: ProductProject): GuideGenerat
     product: {
       name: project.productName,
       description: project.productDescription,
-      emphasizedStrengths: project.strengths,
+      emphasizedStrengths: project.strengths.map(item => item.trim()).filter(Boolean),
       targetCustomers: project.targetCustomers,
-      useSituations: project.useSituations,
+      useSituations: project.useSituations.map(item => item.trim()).filter(Boolean),
     },
     evaluationItems: project.evaluationItems.map(item => item.title),
     ...(hasAnalysis ? {

@@ -138,6 +138,23 @@ export function useProjectWorkspace() {
     edit({ submittedReviews: [...byId.values()] });
   }
 
+  function saveReviewComposition(projectId: string, composition: ProductProject['reviewComposition']) {
+    if (!current.current || current.current.id !== projectId) return false;
+    edit({ reviewComposition: composition });
+    return true;
+  }
+
+  function addComposedReview(projectId: string, text: string) {
+    if (!current.current || current.current.id !== projectId || !text.trim() || text.length > 6000
+      || current.current.submittedReviews.length >= 50) return false;
+    if (!current.current.submittedReviews.some(review => review.text === text.trim())) {
+      edit({ submittedReviews: [...current.current.submittedReviews, {
+        id: crypto.randomUUID(), text: text.trim(), submittedAt: new Date().toISOString(),
+      }] });
+    }
+    return true;
+  }
+
   function saveReviewCheckResults(reviews: ReviewSubmission[], inspections: ReviewInspection[]) {
     if (!current.current) return;
     const submitted = new Map(current.current.submittedReviews.map(review => [review.id, review]));
@@ -193,7 +210,7 @@ export function useProjectWorkspace() {
     getCurrentProject: () => current.current,
     workspace: project?.workspace ?? emptyWorkspace(), updateWorkspace, updateProduct, recordAnalysis,
     saveReviewInputs, saveReviewCheckResults, removeReviewSubmission, clearReviewSubmissions,
-    updateGuideForProject,
+    updateGuideForProject, saveReviewComposition, addComposedReview,
     saveNow: flush,
     rename: (name: string) => edit({ name }),
     create: (name: string) => manage(() => createProject(name)),

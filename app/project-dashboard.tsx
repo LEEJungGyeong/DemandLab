@@ -14,7 +14,7 @@ type Props = {
   onCreate: (name: string) => Promise<boolean>;
   onOpen: (id: string, resume: boolean) => void;
   onRename: (id: string, name: string) => Promise<void>;
-  onDelete: (id: string, name: string) => Promise<void>;
+  onDelete: (id: string, name: string) => Promise<boolean>;
   onRetry: () => void;
 };
 
@@ -30,6 +30,8 @@ export default function ProjectDashboard({
   const [name, setName] = useState('');
   const [renameId, setRenameId] = useState('');
   const [renameValue, setRenameValue] = useState('');
+  const [deleteId, setDeleteId] = useState('');
+  const [deleting, setDeleting] = useState(false);
   const disabled = !ready || managing;
 
   return (
@@ -116,9 +118,26 @@ export default function ProjectDashboard({
                   setRenameValue(item.name);
                   setRenameId(item.id);
                 }}>이름 수정</button>}
-                <button className="plain danger-text" type="button" disabled={disabled}
-                  onClick={() => void onDelete(item.id, item.name)}><Trash2 size={14} />프로젝트 삭제</button>
               </details>
+              <div className="project-card-delete">
+                {deleteId === item.id ? <div className="project-delete-confirm" role="alert">
+                  <strong>“{item.name || '이름 없는 프로젝트'}” 프로젝트를 삭제할까요?</strong>
+                  <p>상품 정보, 리뷰, 가이드, AI 작성 초안과 검수 결과가 함께 삭제됩니다. 복구할 수 없습니다.</p>
+                  <div>
+                    <button className="plain" type="button" disabled={disabled || deleting}
+                      onClick={() => setDeleteId('')}>취소</button>
+                    <button className="primary project-delete-confirm-button" type="button" disabled={disabled || deleting}
+                      onClick={async () => {
+                        if (deleting) return;
+                        setDeleting(true);
+                        try { if (await onDelete(item.id, item.name)) setDeleteId(''); }
+                        finally { setDeleting(false); }
+                      }}>{deleting ? '삭제 중…' : '삭제 확인'}</button>
+                  </div>
+                </div> : <button className="plain danger-text" type="button" disabled={disabled || deleting}
+                  aria-label={`${item.name || '이름 없는 프로젝트'} 프로젝트 삭제`}
+                  onClick={() => setDeleteId(item.id)}><Trash2 size={14} />프로젝트 삭제</button>}
+              </div>
             </article>
           ))}
         </div>

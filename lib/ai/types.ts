@@ -9,6 +9,7 @@ export type AIWorkType =
   | 'review-analysis'
   | 'product-analysis'
   | 'guide-generation'
+  | 'review-draft'
   | 'review-check';
 
 export type AISettings = {
@@ -102,6 +103,7 @@ export type AIProvider = {
   analyzeReviews(request: ReviewAnalysisRequest): Promise<ReviewAnalysisResponse>;
   generateGuide(request: GuideGenerationRequest): Promise<GuideGenerationDraft>;
   checkReviews(request: ReviewCheckRequest): Promise<ReviewCheckResponse>;
+  draftReview(input: import('./review-draft').ReviewDraftInput): Promise<import('./review-draft').ReviewDraftResponse>;
 };
 
 export const DEFAULT_AI_SETTINGS: AISettings = {

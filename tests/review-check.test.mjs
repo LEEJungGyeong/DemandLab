@@ -208,6 +208,12 @@ test('Ollama review-check provider verifies the selected model and only contacts
     const provider = createAIProvider('ollama', { model: 'qwen2.5:7b' });
     const result = await provider.checkReviews({ task: 'review-check', input });
     assert.equal(result.inspections[0].provider, 'ollama');
+    const sent = JSON.parse(calls[1].init.body);
+    const reviewSchema = sent.format.properties.reviews.items.properties;
+    assert.deepEqual(reviewSchema.id.enum, input.reviews.map(review => review.id));
+    assert.deepEqual(reviewSchema.items.items.properties.guideItemId.enum,
+      input.guide.testItems.map(item => item.id));
+    assert.ok(reviewSchema.disclosure.required.includes('evidence'));
     assert.deepEqual(calls.map(call => call.url), [
       'http://127.0.0.1:11434/api/tags',
       'http://127.0.0.1:11434/api/chat',

@@ -15,6 +15,7 @@ export type AIErrorCode =
   | 'review-check-guide-missing'
   | 'review-check-reviews-missing'
   | 'invalid-review-check-response'
+  | 'invalid-review-draft'
   | 'network-error';
 
 const messages: Record<AIErrorCode, string> = {
@@ -34,6 +35,7 @@ const messages: Record<AIErrorCode, string> = {
   'review-check-guide-missing': '저장된 구조화 리뷰 가이드가 없습니다. 먼저 리뷰 가이드를 생성하고 저장해 주세요.',
   'review-check-reviews-missing': '검수할 리뷰를 한 건 이상 입력해 주세요.',
   'invalid-review-check-response': 'AI 검수 응답이 올바른 형식이 아니거나 리뷰 원문 근거가 일치하지 않습니다.',
+  'invalid-review-draft': 'AI 초안의 문장 형식이나 사용 경험 근거가 맞지 않습니다. 입력 내용을 구체적으로 적고 다시 생성해 주세요.',
   'network-error': 'AI 요청 중 네트워크 오류가 발생했습니다. 연결 상태를 확인하고 다시 시도해 주세요.',
 };
 
