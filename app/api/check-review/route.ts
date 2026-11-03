@@ -25,7 +25,7 @@ export async function POST(request: Request): Promise<Response> {
     const body: unknown = JSON.parse(raw);
     if (!body || typeof body !== 'object') throw new AIServiceError('invalid-request', 400);
     const { provider, model, key, input } = body as CheckReviewRequest;
-    if ((provider !== 'openai' && provider !== 'ollama')
+    if ((provider !== 'openai' && provider !== 'ollama' && provider !== 'gemini')
       || (model !== undefined && (typeof model !== 'string' || model.length > 200))) {
       throw new AIServiceError('invalid-request', 400);
     }
@@ -40,9 +40,7 @@ export async function POST(request: Request): Promise<Response> {
     const checkRequest = validateReviewCheckRequest({ task: 'review-check', input });
     const selectedModel = typeof model === 'string'
       ? model.trim()
-      : selectedProvider === 'openai'
-        ? DEFAULT_AI_SETTINGS.models.openai
-        : '';
+      : DEFAULT_AI_SETTINGS.models[selectedProvider];
     const aiProvider = createAIProvider(selectedProvider, {
       model: selectedModel,
       ...(typeof key === 'string' ? { apiKey: key } : {}),

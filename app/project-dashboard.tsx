@@ -1,11 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { ArrowRight, BarChart3, Check, ClipboardList, FolderKanban, Plus, Trash2 } from 'lucide-react';
-import type { ProjectSummary } from '../lib/types';
+import { ArrowRight, FolderKanban, Plus, Trash2 } from 'lucide-react';
+import WorkspaceOverview from './workspace-overview';
+import type { ProductProject, ProjectSummary } from '../lib/types';
 
 type Props = {
   projects: ProjectSummary[];
+  project?: ProductProject;
+  onNavigate: (step: number) => void;
   activeProjectId?: string;
   ready: boolean;
   managing: boolean;
@@ -18,14 +21,9 @@ type Props = {
   onRetry: () => void;
 };
 
-const features = [
-  { icon: BarChart3, title: '상품과 고객 이해', detail: '상품 정보와 기존 고객 리뷰를 바탕으로 평가할 항목을 정리합니다.' },
-  { icon: ClipboardList, title: '실제 경험 가이드', detail: '리뷰단이 직접 확인하고 기록할 테스트 가이드를 만듭니다.' },
-  { icon: Check, title: '리뷰 초안 검수', detail: '긍정·부정과 무관하게 가이드 충실도와 구체성을 확인합니다.' },
-];
 
 export default function ProjectDashboard({
-  projects, activeProjectId, ready, managing, status, error, onCreate, onOpen, onRename, onDelete, onRetry,
+  projects, project, onNavigate, activeProjectId, ready, managing, status, error, onCreate, onOpen, onRename, onDelete, onRetry,
 }: Props) {
   const [name, setName] = useState('');
   const [renameId, setRenameId] = useState('');
@@ -36,9 +34,12 @@ export default function ProjectDashboard({
 
   return (
     <section className="content project-dashboard">
+      <div className="title-row"><div><div className="eyebrow">WORKSPACE / OVERVIEW</div><h1>리뷰 인사이트</h1><p>고객의 반응과 다음 할 일을 한눈에 확인하세요.</p></div><span className="version">DEMANDLAB</span></div>
+      <WorkspaceOverview project={project} onNavigate={onNavigate}/>
+      <details className="project-create-disclosure"><summary><Plus size={18}/> 새 프로젝트 만들기 <span>상품별로 리뷰와 가이드를 관리하세요</span></summary>
       <div className="dashboard-welcome">
         <div className="eyebrow">DEMANDLAB WORKSPACE</div>
-        <h1>리뷰단 운영, 이어서 진행하세요.</h1>
+        <h2>새 상품 프로젝트</h2>
         <p>상품 프로젝트를 선택해 저장된 작업을 이어가거나 새 캠페인을 시작하세요.</p>
         <form className="dashboard-create-form" onSubmit={async event => {
           event.preventDefault();
@@ -56,15 +57,7 @@ export default function ProjectDashboard({
         {error && <div className="error" role="alert">{error}<button className="plain" onClick={onRetry}>다시 시도</button></div>}
       </div>
 
-      {!projects.length && <section className="dashboard-first-visit">
-        <h2>DemandLab에서 할 수 있는 일</h2>
-        <div className="dashboard-feature-grid">
-          {features.map(({ icon: Icon, title, detail }) => (
-            <article key={title}><span><Icon size={18} /></span><strong>{title}</strong><p>{detail}</p></article>
-          ))}
-        </div>
-        <p className="dashboard-first-note">기존 리뷰가 없어도 상품 정보와 직접 정한 평가 항목으로 시작할 수 있습니다.</p>
-      </section>}
+      </details>
 
       {!!projects.length && <section className="project-list dashboard-project-list" aria-label="상품 프로젝트 목록">
         <div className="project-list-heading">

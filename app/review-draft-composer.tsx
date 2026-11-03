@@ -75,7 +75,7 @@ export default function ReviewDraftComposer({ project, settings, apiKey, onOpenS
       const response = await fetch('/api/draft-review', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ provider: settings.provider, model: settings.models[settings.provider], input: requestInput,
-          ...(settings.provider === 'openai' ? { key: apiKey } : {}) }),
+          ...(settings.provider !== 'ollama' ? { key: apiKey } : {}) }),
       });
       const data = await response.json() as { error?: string; draft?: ReviewDraftResponse & {
         generatedAt: string; provider: AISettings['provider']; model: string;
@@ -107,10 +107,11 @@ export default function ReviewDraftComposer({ project, settings, apiKey, onOpenS
     <div className="eyebrow">AI REVIEW WRITING</div>
     <h2 id="review-draft-title">D. 상품 강점으로 AI 리뷰 작성</h2>
     <p>상품 정보에서 입력한 ‘강조하고 싶은 상품 강점’을 기준으로 리뷰를 자동 생성합니다.</p>
-    <div className="guide-review-summary"><strong>리뷰에 반영할 상품 강점</strong>
+    <details className="reading-details"><summary>반영할 상품 강점 · {project.strengths.filter(s => s.trim()).length}개</summary><div className="guide-review-summary">
       <ul>{project.strengths.filter(s => s.trim()).map((s, i) => <li key={i}>{s}</li>)}</ul>
       {!project.strengths.some(s => s.trim()) && <p>상품 정보에서 강조하고 싶은 강점을 먼저 입력해 주세요.</p>}
     </div>
+    </details>
     <div className="guide-actions"><button className="primary" type="button" disabled={busy || !project.productName.trim() || !project.strengths.some(s => s.trim())} onClick={() => void generate(true)}>
       {busy ? '상품 강점에 맞춰 리뷰를 작성하고 있어요…' : '상품 강점으로 리뷰 자동 생성'}
     </button><span>추가 입력 없이 생성</span></div>

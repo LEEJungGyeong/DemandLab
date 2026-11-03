@@ -15,14 +15,14 @@ export async function POST(request: Request): Promise<Response> {
     const body = JSON.parse(raw);
     if (!body || typeof body !== 'object') throw new AIServiceError('invalid-request', 400);
     const { provider, model, key, input } = body;
-    if ((provider !== 'openai' && provider !== 'ollama')
+    if ((provider !== 'openai' && provider !== 'ollama' && provider !== 'gemini')
       || (model !== undefined && (typeof model !== 'string' || model.length > 200))
       || (key !== undefined && (typeof key !== 'string' || key.length > 512))) {
       throw new AIServiceError('invalid-request', 400);
     }
     const validated = validateReviewDraftInput(input);
     const ai = createAIProvider(provider, {
-      model: typeof model === 'string' ? model.trim() : DEFAULT_AI_SETTINGS.models[provider as 'openai' | 'ollama'],
+      model: typeof model === 'string' ? model.trim() : DEFAULT_AI_SETTINGS.models[provider as 'openai' | 'ollama' | 'gemini'],
       ...(typeof key === 'string' ? { apiKey: key } : {}),
     });
     const draft = await ai.draftReview(validated);

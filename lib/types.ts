@@ -16,7 +16,7 @@ export type Result = {
 };
 
 export type AIAnalysisMetadata = {
-  provider: 'openai' | 'ollama';
+  provider: 'openai' | 'ollama' | 'gemini';
   model: string;
   analyzedAt: string;
 };
@@ -58,7 +58,7 @@ export type ReviewGuide = {
   purpose?: string;
   testItems?: ReviewGuideTestItem[];
   writingGuidance?: string[];
-  provider?: 'openai' | 'ollama';
+  provider?: 'openai' | 'ollama' | 'gemini';
   model?: string;
   updatedAt?: string;
   sourceVersion?: number;
@@ -125,7 +125,7 @@ export type ReviewInspection = {
   };
   items: ReviewInspectionItem[];
   guideVersion: string;
-  provider: 'openai' | 'ollama';
+  provider: 'openai' | 'ollama' | 'gemini';
   model: string;
   inspectedAt: string;
   error?: string;
@@ -174,7 +174,7 @@ export type ReviewComposition = {
   sentences?: import('./ai/review-draft').ReviewDraftSentence[];
   signature?: string;
   generatedAt?: string;
-  provider?: 'openai' | 'ollama';
+  provider?: 'openai' | 'ollama' | 'gemini';
   model?: string;
 };
 

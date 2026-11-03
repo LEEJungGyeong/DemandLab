@@ -5,7 +5,7 @@ import type {
 import { AIServiceError, toAIServiceError } from './errors';
 import { reviewDraftPrompt, parseReviewDraftResponse, reviewDraftContext } from './review-draft';
 import {
-  GUIDE_GENERATION_SYSTEM_PROMPT, parseGuideGenerationResponse, parseReviewAnalysisResponse,
+  GUIDE_GENERATION_SYSTEM_PROMPT, parseGeneratedGuideResponse, parseReviewAnalysisResponse,
   parseReviewCheckResponse, REVIEW_ANALYSIS_SYSTEM_PROMPT, REVIEW_CHECK_SYSTEM_PROMPT,
 } from './schemas';
 
@@ -130,7 +130,7 @@ export function createOpenAIProvider(config: AIProviderConfig): AIProvider {
         || typeof (message as { content?: unknown }).content !== 'string') {
         throw new AIServiceError('invalid-response');
       }
-      return parseGuideGenerationResponse((message as { content: string }).content, request.input);
+      return parseGeneratedGuideResponse((message as { content: string }).content, request.input);
     },
     async checkReviews(request: ReviewCheckRequest) {
       const response = await openAIRequest('/chat/completions', apiKey, {

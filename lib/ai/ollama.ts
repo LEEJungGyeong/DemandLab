@@ -5,7 +5,7 @@ import type {
 import { AIServiceError } from './errors';
 import { reviewDraftPrompt, parseReviewDraftResponse, reviewDraftSchema, reviewDraftContext } from './review-draft';
 import {
-  GUIDE_GENERATION_SYSTEM_PROMPT, parseGuideGenerationResponse, parseReviewAnalysisResponse,
+  GUIDE_GENERATION_SYSTEM_PROMPT, parseGeneratedGuideResponse, parseReviewAnalysisResponse,
   parseReviewCheckResponse, REVIEW_ANALYSIS_SYSTEM_PROMPT, REVIEW_CHECK_SYSTEM_PROMPT,
 } from './schemas';
 import { OLLAMA_BASE_URL } from './constants';
@@ -158,7 +158,7 @@ export function createOllamaProvider(config: AIProviderConfig): AIProvider {
         || typeof (message as { content?: unknown }).content !== 'string') {
         throw new AIServiceError('invalid-response');
       }
-      return parseGuideGenerationResponse((message as { content: string }).content, request.input);
+      return parseGeneratedGuideResponse((message as { content: string }).content, request.input);
     },
     async checkReviews(request: ReviewCheckRequest) {
       if (!model) throw new AIServiceError('ollama-model-missing', 400);

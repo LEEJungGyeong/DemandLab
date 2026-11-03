@@ -1,9 +1,11 @@
 'use client';
 
+import { readAnalysisResponse } from '../lib/ai/analysis-stream';
+
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
-  ArrowRight, ArrowUpRight, BarChart3, Check, ChevronRight, Download,
+  ArrowRight, ArrowUpRight, BarChart3, Check, ChevronDown, ChevronRight, Download,
   ClipboardList, FlaskConical, FolderKanban, KeyRound, MessageSquare, Plus, Search, SlidersHorizontal,
   Trash2, Upload, X,
 } from 'lucide-react';
@@ -56,9 +58,16 @@ export default function Home() {
   const [sentiment, setSentiment] = useState('전체');
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState('기본순');
-  const [key, setKey] = useState('');
+  const connectionVersion = useRef(0);
+  const [keys, setKeys] = useState({ openai: '', gemini: '', ollama: '' });
   const [settings, setSettings] = useState(false);
   const [aiSettings, setAISettings] = useState<AISettings>(DEFAULT_AI_SETTINGS);
+  const key = keys[aiSettings.provider];
+  const setKey = (value: string) => {
+    connectionVersion.current++;
+    setKeys(previous => ({ ...previous, [aiSettings.provider]: value }));
+  };
+  const [analysisProgress, setAnalysisProgress] = useState('');
   const [aiSettingsReady, setAISettingsReady] = useState(false);
   const [connectionState, setConnectionState] = useState<'idle' | 'checking' | 'connected' | 'disconnected' | 'model-missing' | 'error'>('idle');
   const [connectionMessage, setConnectionMessage] = useState('아직 연결을 확인하지 않았습니다.');
@@ -74,6 +83,8 @@ export default function Home() {
   const [reviewCheckBusy, setReviewCheckBusy] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const reviewList = useRef<HTMLDivElement>(null);
+  const reviewResultsSection = useRef<HTMLDetailsElement>(null);
+  const originalReviewsSection = useRef<HTMLDetailsElement>(null);
   const aiSettingsQueue = useRef<Promise<void>>(Promise.resolve());
   const disabled = !storage.ready || storage.managing || busy;
   const navigationDisabled = disabled || reviewCheckBusy;
@@ -274,6 +285,7 @@ export default function Home() {
 
   function updateAISettings(patch: Partial<AISettings> | { provider: AIProviderKind } | { model: string }) {
     if (!aiSettingsReady) return;
+    connectionVersion.current++;
     const next: AISettings = {
       ...aiSettings,
       ...('provider' in patch ? { provider: patch.provider } : {}),
@@ -295,25 +307,28 @@ export default function Home() {
   }
 
   async function checkAIConnection(action: 'test' | 'models' = 'test') {
+    const version = ++connectionVersion.current;
     if (aiSettings.provider === 'openai' && !key.trim()) {
       setConnectionState('disconnected');
       setConnectionMessage('OpenAI API 키를 입력해 주세요. 키는 이 탭의 메모리에만 유지됩니다.');
       return;
     }
     setConnectionState('checking');
-    setConnectionMessage('AI 제공자와 모델 목록을 확인하고 있습니다.');
+    setConnectionMessage(aiSettings.provider === 'gemini' && action === 'test' ? 'Gemini 생성 요청으로 연결을 확인하고 있습니다.' : 'AI 제공자와 모델 목록을 확인하고 있습니다.');
     try {
       const response = await fetch('/api/ai', {
+        signal: AbortSignal.timeout(195000),
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action,
           provider: aiSettings.provider,
           model: aiSettings.models[aiSettings.provider],
-          ...(aiSettings.provider === 'openai' ? { key } : {}),
+          ...(aiSettings.provider !== 'ollama' ? { key } : {}),
         }),
       });
       const data = await response.json() as { error?: string; code?: string; models?: string[]; modelAvailable?: boolean };
+      if (version !== connectionVersion.current) return;
       if (!response.ok) {
         setConnectionState(data.code === 'ollama-model-missing'
           ? 'model-missing'
@@ -329,12 +344,15 @@ export default function Home() {
           ? 'Ollama는 연결되었지만 선택한 모델이 없습니다. 설치된 모델을 선택해 주세요.'
           : 'Ollama 서버는 연결되었지만 설치된 모델이 없습니다. Ollama 모델을 설치해 주세요.');
       } else {
-        setConnectionState('connected');
-        setConnectionMessage(aiSettings.provider === 'openai'
+        setConnectionState(aiSettings.provider === 'gemini' && action === 'models' ? 'idle' : 'connected');
+        setConnectionMessage(aiSettings.provider === 'gemini'
+          ? (action === 'test' ? 'Gemini 연결 성공 · 실제 생성 응답 확인' : 'Gemini 모델 목록 조회 완료 · 연결 테스트를 실행해 주세요.')
+          : aiSettings.provider === 'openai'
           ? `OpenAI 연결됨 · 모델 ${models.length}개 조회`
           : `Ollama 연결됨 · 모델 ${models.length}개 조회`);
       }
     } catch (reason: unknown) {
+      if (version !== connectionVersion.current) return;
       setConnectionState(aiSettings.provider === 'ollama' ? 'disconnected' : 'error');
       setConnectionMessage(reason instanceof Error
         ? reason.message
@@ -462,23 +480,27 @@ export default function Home() {
       return;
     }
     if (!reviews.length || busy) return;
+    const expected = project ? { projectId: project.id, inputVersion: project.analysisInputVersion ?? 0 } : undefined;
     setError('');
     setBusy(true);
+    setAnalysisProgress('리뷰 분석 요청 중…');
     try {
       if (reviews.length > 100 || reviews.some(review => review.text.length > 4000)) {
         throw new Error('이번 버전은 최대 100건, 리뷰당 4,000자까지 AI 분석합니다.');
       }
       const response = await fetch('/api/analyze', {
+        signal: AbortSignal.timeout(2400000),
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           provider: aiSettings.provider,
           model: aiSettings.models[aiSettings.provider],
-          ...(aiSettings.provider === 'openai' ? { key } : {}),
+          ...(aiSettings.provider !== 'ollama' ? { key } : {}),
+          stream: aiSettings.provider === 'gemini',
           reviews: reviews.map(({ id, text }) => ({ id, text })),
         }),
       });
-      const data = await response.json() as {
+      const data = await readAnalysisResponse(response, (completed, total) => setAnalysisProgress(`리뷰 ${completed}/${total}건 분석 · 주제 통합 중…`)) as {
         error?: string;
         results: Result[];
         themes: Theme[];
@@ -487,13 +509,15 @@ export default function Home() {
         metadata?: { provider: AIProviderKind; model: string; analyzedAt: string };
       };
       if (!response.ok) throw new Error(data.error || 'AI 분석 요청이 실패했습니다.');
-      storage.recordAnalysis({
+      const saved = storage.recordAnalysis({
         results: data.results,
         themes: data.themes,
         analysisMetadata: data.metadata,
         mode: 'AI 분석 완료',
         notice: `원문 근거를 검증한 분석 ${data.results.length}건${data.dropped ? ` · 유효하지 않은 결과 ${data.dropped}건 제외` : ''}${data.missingReviewIds?.length ? ` · 결과가 없는 리뷰 ${data.missingReviewIds.length}건` : ''}. 체험단 스위치는 집계 대상을 변경합니다.`,
-      });
+      }, expected);
+      if (!saved) throw new Error('분석 중 프로젝트 또는 입력이 변경되어 결과를 저장하지 않았습니다. 다시 분석해 주세요.');
+      if (reviewResultsSection.current) reviewResultsSection.current.open = true;
       resetView();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : 'AI 분석을 완료하지 못했습니다.');
@@ -506,6 +530,7 @@ export default function Home() {
     setTheme(topic);
     setSentiment(selectedSentiment);
     setPage(1);
+    if (originalReviewsSection.current) originalReviewsSection.current.open = true;
     reviewList.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
@@ -531,6 +556,7 @@ export default function Home() {
   return (
     <div className={`shell ${dashboardMode ? 'dashboard-shell' : ''}`}>
       <aside>
+        <div className="brand sidebar-brand"><span className="brand-icon"><FlaskConical size={22} /></span>DemandLab<span className="dot">.</span></div>
         <div className="workspace">PRODUCT WORKSPACE</div>
         <button className={`nav ${dashboardMode ? 'active' : ''}`} aria-current={dashboardMode ? 'page' : undefined}
           disabled={navigationDisabled} onClick={() => void goToDashboard()}>
@@ -597,6 +623,8 @@ export default function Home() {
         </header>
         {dashboardMode ? <ProjectDashboard
           projects={storage.projects}
+          project={project ?? undefined}
+          onNavigate={navigateToStep}
           activeProjectId={project?.id}
           ready={storage.ready}
           managing={storage.managing}
@@ -635,9 +663,6 @@ export default function Home() {
           onOpenSettings={() => setSettings(true)}
           onBack={() => navigateToStep(2)}
           onSaveGuide={storage.updateGuideForProject}
-          onSaveComposition={storage.saveReviewComposition}
-          onAddComposedReview={storage.addComposedReview}
-          onOpenInspection={() => navigateToStep(4)}
           saveNow={storage.saveNow}
           storageStatus={storage.status}
           storageError={storage.storageError}
@@ -658,7 +683,7 @@ export default function Home() {
           storageStatus={storage.status}
           storageError={storage.storageError}
           onBusyChange={setReviewCheckBusy}
-        /> : <section className="content">
+        /> : <section className={workflowStep === 2 ? "content analysis-content" : "content"}>
           <div className="title-row">
             <div>
               <div className="eyebrow">{workflowStep === 1 ? 'PRODUCT SETUP' : 'OPTIONAL REVIEW INSIGHTS'}</div>
@@ -714,15 +739,16 @@ export default function Home() {
           </fieldset>
           </>}
 
-          {workflowStep === 2 && <fieldset className="workspace-fields" disabled={disabled || !project}>
+          {workflowStep === 2 && <fieldset key={project?.id} className="workspace-fields analysis-disclosures" disabled={disabled || !project}>
             <section className="optional-step-note">
               <strong>기존 리뷰 분석은 선택 사항입니다.</strong>
               <span>리뷰가 없다면 건너뛰어도 상품 정보와 직접 설정한 평가 항목으로 가이드를 만들 수 있습니다.</span>
             </section>
-            <section className="dashboard-card" id="evaluation-settings">
+            <details className="guide-section-disclosure" id="evaluation-settings">
+              <summary><h2>A. 리뷰 업로드 및 분석</h2><ChevronDown size={20} aria-hidden="true" /></summary>
+              <section className="dashboard-card analysis-disclosure-body">
               <div className="section-title">
-                <div><h2>B. 기존 고객 리뷰 분석 <span className="optional">선택</span></h2>
-                  <p>CSV/TSV를 올리면 본문·별점·날짜·옵션 열을 확인한 뒤 리뷰를 불러옵니다.</p></div>
+                <p>CSV/TSV를 올리면 본문·별점·날짜·옵션 열을 확인한 뒤 리뷰를 불러옵니다.</p>
                 <button className="text-button" type="button" onClick={downloadSample}><Download size={14} />예시 CSV 다운로드</button>
               </div>
               <div className="upload-panel"
@@ -770,7 +796,7 @@ export default function Home() {
                 <div className="dataset">
                   <div><span className="badge">{mode || '업로드 데이터'}</span><h2>{file || '상품 리뷰'}</h2>
                     {storage.workspace.analysisMetadata && <small className="analysis-meta">
-                      {storage.workspace.analysisMetadata.provider === 'openai' ? 'OpenAI' : 'Ollama'}
+                      {storage.workspace.analysisMetadata.provider === 'gemini' ? 'Gemini' : storage.workspace.analysisMetadata.provider === 'openai' ? 'OpenAI' : 'Ollama'}
                       {' · '}{storage.workspace.analysisMetadata.model}
                       {' · '}{new Date(storage.workspace.analysisMetadata.analyzedAt).toLocaleString('ko-KR')}
                     </small>}
@@ -778,8 +804,8 @@ export default function Home() {
                   <div className="dataset-actions">
                     <button disabled={busy} className="plain" type="button" onClick={analyzeDemo}>무료 데모 분석 (모의)</button>
                     <button disabled={busy} className="primary" type="button" onClick={analyze}>
-                      {busy ? 'AI가 주제와 근거를 분석하고 있어요…'
-                        : `실제 AI 분석 · ${aiSettings.provider === 'openai' ? 'OpenAI' : 'Ollama'}`}
+                      {busy ? analysisProgress || 'AI가 주제와 근거를 분석하고 있어요…'
+                        : `실제 AI 분석 · ${aiSettings.provider === 'gemini' ? 'Gemini' : aiSettings.provider === 'openai' ? 'OpenAI' : 'Ollama'}`}
                       <FlaskConical size={16} />
                     </button>
                   </div>
@@ -796,8 +822,14 @@ export default function Home() {
                   <div><span>발견한 주제</span><strong>{stats.length}<small>개</small></strong></div>
                 </div>
 
+              </>}
+              </section>
+            </details>
+            <details ref={reviewResultsSection} className="guide-section-disclosure">
+              <summary><h2>B. 고객 리뷰 분석 결과</h2><ChevronDown size={20} aria-hidden="true" /></summary>
+              <section className="dashboard-card analysis-disclosure-body">
                 <div className="section-title">
-                  <div><h2>C. 고객 리뷰에서 확인된 주제</h2><p>긍정·부정 반응과 실제 원문 근거를 함께 확인하세요.</p></div>
+                  <div><h2>고객 리뷰에서 확인된 주제</h2><p>긍정·부정 반응과 실제 원문 근거를 함께 확인하세요.</p></div>
                   <label className="toggle">
                     <input type="checkbox" checked={exclude} onChange={event => {
                       storage.updateWorkspace('exclude', event.target.checked);
@@ -854,6 +886,11 @@ export default function Home() {
                   분석 결과가 아직 없습니다. AI 분석을 실행하거나, 원문 탐색 및 검색은 리뷰 불러오기 직후 사용할 수 있습니다.
                 </div>}
 
+              </section>
+            </details>
+            <details ref={originalReviewsSection} className="guide-section-disclosure">
+              <summary><h2>C. 리뷰 원문 확인</h2><ChevronDown size={20} aria-hidden="true" /></summary>
+              <section className="dashboard-card analysis-disclosure-body">
                 <div ref={reviewList} className="review-section">
                   <div className="section-title">
                     <div><h2>원문에서 직접 확인하세요 <span className="count">{shown.length}</span></h2>
@@ -882,7 +919,7 @@ export default function Home() {
                     {theme === '전체' ? '전체 주제' : theme} · {sentiment === '전체' ? '모든 반응' : sentiment}
                     · {exclude ? '체험단 제외' : '체험단 포함'}
                   </div>
-                  {shown.slice(0, page * 12).map(review => {
+                  {shown.slice(0, page * 5).map(review => {
                     const reviewResults = filteredResults.filter(result =>
                       result.id === review.id && (theme === '전체' || result.theme === theme));
                     return <article className="review" key={review.id}>
@@ -901,16 +938,18 @@ export default function Home() {
                     </article>;
                   })}
                   {!shown.length && <div className="empty">선택한 조건에 맞는 리뷰가 없습니다.</div>}
-                  {shown.length > page * 12 && <button className="more" type="button" onClick={() => setPage(page + 1)}>
-                    리뷰 더 보기 ({Math.min(page * 12, shown.length)} / {shown.length})
+                  {shown.length > page * 5 && <button className="more" type="button" onClick={() => setPage(previous => previous + 1)}>
+                    리뷰 더 보기 ({Math.min(page * 5, shown.length)} / {shown.length})
                   </button>}
                 </div>
-              </>}
-            </section>
+              </section>
+            </details>
 
-            <section className="dashboard-card">
+            <details className="guide-section-disclosure">
+              <summary><h2>D. 핵심 평가 항목</h2><ChevronDown size={20} aria-hidden="true" /></summary>
+              <section className="dashboard-card analysis-disclosure-body">
               <div className="section-title">
-                <div><h2>D. 핵심 평가 항목</h2>
+                <div><h2>핵심 평가 항목</h2>
                   <p>리뷰단이 실제로 확인할 주제와 조건입니다. 긍정적인 결론을 미리 정하지 않습니다.</p></div>
               </div>
               <form className="evaluation-add" onSubmit={event => {
@@ -938,7 +977,8 @@ export default function Home() {
                   </li>)}</ul>
                 : <div className="empty">직접 항목을 추가하거나 위 주제 카드에서 평가 항목으로 가져올 수 있습니다.</div>}
               <p className="evaluation-note"><Check size={15} />선택한 {evaluationItems.length}개 항목은 현재 상품 프로젝트에 저장되며, 다음 단계에서 리뷰단 가이드의 입력으로 사용할 수 있습니다.</p>
-            </section>
+              </section>
+            </details>
 
           </fieldset>
           }
@@ -999,25 +1039,27 @@ export default function Home() {
               setAvailableModels([]);
             }}>
               <option value="openai">OpenAI API · 클라우드</option>
+              <option value="gemini">Google Gemini API · 클라우드</option>
               <option value="ollama">Ollama · 이 컴퓨터의 로컬 모델</option>
             </select>
           </label>
 
-          {aiSettings.provider === 'openai' ? <>
-            <label>OpenAI API 키
+          {aiSettings.provider !== 'ollama' ? <>
+            <label>{aiSettings.provider === 'gemini' ? 'Gemini' : 'OpenAI'} API 키
               <input type="password" autoComplete="off" value={key}
                 onChange={event => {
                   setKey(event.target.value);
                   setConnectionState('idle');
                   setConnectionMessage('API 키가 변경되었습니다. 연결을 확인해 주세요.');
-                }} placeholder="sk-…" />
+                }} placeholder={aiSettings.provider === 'gemini' ? 'Gemini API 키 (서버 환경변수 사용 시 비워두세요)' : 'sk-…'} />
             </label>
-            <small>기본 모델은 gpt-4.1-mini입니다. 키는 현재 탭 메모리에만 유지하며 브라우저 저장소에 저장하지 않습니다.
-              실제 분석 시 리뷰 본문만 OpenAI로 전송되고 사용 비용이 발생할 수 있습니다.</small>
+            <small>기본 모델은 {aiSettings.provider === 'gemini' ? 'gemini-3.5-flash-lite' : 'gpt-4.1-mini'}입니다. 키는 현재 탭 메모리에만 유지하며 브라우저 저장소에 저장하지 않습니다.
+              실제 분석 시 리뷰 본문이 선택한 제공자로 전송되고 사용 비용이 발생할 수 있습니다.</small>
+            {aiSettings.provider === 'gemini' && <small><a href="https://aistudio.google.com/api-keys" target="_blank" rel="noreferrer">Gemini API 키 발급</a> · 서버의 GEMINI_API_KEY도 사용할 수 있습니다.</small>}
             <label>분석 모델
-              <select value={aiSettings.models.openai} onChange={event => updateAISettings({ model: event.target.value })}>
-                {[...new Set([aiSettings.models.openai, ...availableModels].filter(Boolean))].map(model =>
-                  <option key={model} value={model}>{model}{model === 'gpt-4.1-mini' ? ' · 기본값' : ''}</option>)}
+              <select value={aiSettings.models[aiSettings.provider]} onChange={event => updateAISettings({ model: event.target.value })}>
+                {[...new Set([aiSettings.models[aiSettings.provider], ...availableModels].filter(Boolean))].map(model =>
+                  <option key={model} value={model}>{model}{model === DEFAULT_AI_SETTINGS.models[aiSettings.provider] ? ' · 기본값' : ''}</option>)}
               </select>
             </label>
           </> : <>
@@ -1053,7 +1095,7 @@ export default function Home() {
           <small>무료 예시 분석은 AI 연결 없이 작동합니다. 로컬 AI는 최대 100건 · 리뷰당 4,000자까지 보냅니다.
             상품 정보나 타깃은 리뷰 분석 요청에 포함되지 않습니다.</small>
           <button className="primary full" type="button" onClick={() => setSettings(false)}>설정 완료</button>
-          {key && aiSettings.provider === 'openai'
+          {key && aiSettings.provider !== 'ollama'
             && <button className="text-button" type="button" onClick={() => {
               setKey('');
               setConnectionState('idle');

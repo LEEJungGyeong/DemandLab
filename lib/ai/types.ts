@@ -3,7 +3,7 @@ import type {
 } from '../types';
 export type { AIAnalysisMetadata } from '../types';
 
-export type AIProviderKind = 'openai' | 'ollama';
+export type AIProviderKind = 'openai' | 'ollama' | 'gemini';
 
 export type AIWorkType =
   | 'review-analysis'
@@ -15,6 +15,7 @@ export type AIWorkType =
 export type AISettings = {
   provider: AIProviderKind;
   models: {
+    gemini: string;
     openai: string;
     ollama: string;
   };
@@ -99,8 +100,9 @@ export type AIProviderConfig = {
 export type AIProvider = {
   readonly kind: AIProviderKind;
   readonly model: string;
+  testConnection?(): Promise<void>;
   listModels(): Promise<string[]>;
-  analyzeReviews(request: ReviewAnalysisRequest): Promise<ReviewAnalysisResponse>;
+  analyzeReviews(request: ReviewAnalysisRequest, onProgress?: (completed: number, total: number) => void): Promise<ReviewAnalysisResponse>;
   generateGuide(request: GuideGenerationRequest): Promise<GuideGenerationDraft>;
   checkReviews(request: ReviewCheckRequest): Promise<ReviewCheckResponse>;
   draftReview(input: import('./review-draft').ReviewDraftInput): Promise<import('./review-draft').ReviewDraftResponse>;
@@ -109,6 +111,7 @@ export type AIProvider = {
 export const DEFAULT_AI_SETTINGS: AISettings = {
   provider: 'openai',
   models: {
+    gemini: 'gemini-3.5-flash-lite',
     openai: 'gpt-4.1-mini',
     ollama: '',
   },

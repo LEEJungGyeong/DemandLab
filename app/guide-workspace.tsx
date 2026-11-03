@@ -1,10 +1,9 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { ArrowLeft, Check, Clipboard, Download, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { ArrowLeft, Check, ChevronDown, Clipboard, Download, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import type { AISettings } from '../lib/ai/types';
 import type { ProductProject, ReviewGuide, ReviewGuideTestItem } from '../lib/types';
-import ReviewDraftComposer from './review-draft-composer';
 import {
   buildGuideGenerationInput, formatReviewGuideMarkdown, formatReviewGuideText, isReviewGuideStale,
 } from '../lib/guide';
@@ -20,9 +19,6 @@ type Props = {
   saveNow: () => Promise<void>;
   storageStatus: string;
   storageError: string;
-  onSaveComposition: (projectId: string, value: NonNullable<ProductProject['reviewComposition']>) => boolean;
-  onAddComposedReview: (projectId: string, text: string) => boolean;
-  onOpenInspection: () => void;
 };
 
 const splitLines = (value: string) => value.split('\n').map(line => line.trim()).filter(Boolean);
@@ -37,7 +33,7 @@ function isGuide(value: unknown): value is ReviewGuide {
 
 export default function GuideWorkspace({
   project, settings, apiKey, settingsReady, onOpenSettings, onBack, onSaveGuide,
-  saveNow, storageStatus, storageError, onSaveComposition, onAddComposedReview, onOpenInspection,
+  saveNow, storageStatus, storageError,
 }: Props) {
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState({ message: '', provider: settings.provider, model: settings.models[settings.provider] });
@@ -48,6 +44,13 @@ export default function GuideWorkspace({
   }
   const [message, setMessage] = useState('');
   const busyRef = useRef(false);
+  const inputSection = useRef<HTMLDetailsElement>(null);
+  const generationSection = useRef<HTMLDetailsElement>(null);
+  const outputSection = useRef<HTMLDetailsElement>(null);
+  function openSection(section: 'input' | 'generate' | 'output') {
+    const target = section === 'input' ? inputSection : section === 'generate' ? generationSection : outputSection;
+    if (target.current) target.current.open = true;
+  }
 
   const input = project ? buildGuideGenerationInput(project) : undefined;
   const guide = isGuide(project?.guide) ? project.guide : undefined;
@@ -56,7 +59,7 @@ export default function GuideWorkspace({
   const ready = Boolean(project?.productName.trim() && project.productDescription.trim()
     && project.strengths.some(item => item.trim()) && project.targetCustomers.trim()
     && project.evaluationItems.length);
-  const providerName = settings.provider === 'openai' ? 'OpenAI' : 'Ollama';
+  const providerName = settings.provider === 'gemini' ? 'Gemini' : settings.provider === 'openai' ? 'OpenAI' : 'Ollama';
   const model = settings.models[settings.provider] || (settings.provider === 'openai' ? 'gpt-4.1-mini' : '선택되지 않음');
 
   function updateGuide(patch: Partial<ReviewGuide>) {
@@ -110,7 +113,7 @@ export default function GuideWorkspace({
         body: JSON.stringify({
           provider: settings.provider,
           model: settings.models[settings.provider],
-          ...(settings.provider === 'openai' ? { key: apiKey } : {}),
+          ...(settings.provider !== 'ollama' ? { key: apiKey } : {}),
           input,
         }),
       });
@@ -122,6 +125,7 @@ export default function GuideWorkspace({
         sourceVersion: project.guideInputVersion ?? 0,
       });
       if (!saved) throw new Error('요청 중 상품 프로젝트가 바뀌어 가이드를 저장하지 않았습니다. 해당 프로젝트를 다시 선택해 주세요.');
+      openSection('output');
       setMessage('가이드를 생성하고 현재 상품 프로젝트에 저장했습니다.');
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : '가이드 생성 중 네트워크 오류가 발생했습니다.');
@@ -199,17 +203,26 @@ export default function GuideWorkspace({
       <div className="title-row">
         <div>
           <div className="eyebrow">REVIEWER GUIDE</div>
-          <h1>실제 경험을 위한 리뷰단 가이드</h1>
-          <p>긍정적인 결론을 정하지 않고, 실제 사용 조건과 관찰 내용을 정리합니다.</p>
+          <h1>리뷰단 가이드</h1>
+          <p>준비 상태를 확인하고, 필요한 항목만 펼쳐서 편집하세요.</p>
         </div>
       </div>
 
-      <section className="dashboard-card guide-input-card">
-        <div className="section-title">
-          <div><h2>A. 이번 생성에 사용할 프로젝트 정보</h2>
-            <p>상품 사실과 사업자가 확인하고 싶은 강점을 구분해 AI에 전달합니다.</p></div>
-        </div>
+      <div className="guide-at-glance">
+        <div><span>상품 준비</span><strong>{ready ? '생성 준비 완료' : '입력 확인 필요'}</strong></div>
+        <div><span>평가 항목</span><strong>{project?.evaluationItems.length ?? 0}<small>개</small></strong></div>
+        <div><span>테스트 가이드</span><strong>{guide ? `${guide.testItems?.length ?? 0}개 항목` : '생성 전'}</strong></div>
+        <a href={guide ? '#guide-output' : '#guide-generate'} onClick={() => openSection(guide ? 'output' : 'generate')}>{guide ? '가이드 편집하기' : '생성 설정으로 이동'} →</a>
+      </div>
+      <nav className="guide-jump" aria-label="가이드 섹션 바로가기"><a href="#guide-input" onClick={() => openSection('input')}>A · 프로젝트 정보</a><a href="#guide-generate" onClick={() => openSection('generate')}>B · 생성 설정</a><a href="#guide-output" onClick={() => openSection('output')}>C · 가이드 편집</a></nav>
+      <div className="guide-preparation-grid">
+      <details id="guide-input" ref={inputSection} className="guide-section-disclosure">
+        <summary><h2>A. 프로젝트 정보</h2><ChevronDown size={20} aria-hidden="true" /></summary>
+        <section className="dashboard-card guide-input-card">
+        <p>입력한 상품 정보와 평가 항목을 사용합니다.</p>
         {!project ? <div className="empty">먼저 상품 분석 화면에서 상품 프로젝트를 선택하거나 생성해 주세요.</div> : <>
+          <div className="guide-project-brief"><strong>{project.productName || '상품명 미입력'}</strong><span>강점 {project.strengths.filter(s => s.trim()).length}개 · 평가 항목 {project.evaluationItems.length}개</span></div>
+          <div className="guide-project-details">
           <dl className="guide-project-summary">
             <div><dt>상품명</dt><dd>{project.productName || '미입력'}</dd></div>
             <div><dt>상품 설명 및 주요 특징</dt><dd>{project.productDescription || '미입력'}</dd></div>
@@ -232,20 +245,21 @@ export default function GuideWorkspace({
           </div>}
           {!input?.existingReviewAnalysis && project.workspace.results.length > 0
             && <p className="muted-note">예시·모의 분석 결과는 실제 리뷰 분석 근거로 AI에 전달하지 않습니다.</p>}
-        </>}
+        </div></>}
       </section>
+      </details>
 
-      <section className="guide-generation-panel">
+      <details id="guide-generate" ref={generationSection} className="guide-section-disclosure">
+        <summary><h2>B. AI 생성 설정</h2><ChevronDown size={20} aria-hidden="true" /></summary>
+        <section className="guide-generation-panel">
         <div>
           <div className="eyebrow">AI GENERATION</div>
-          <h2>B. AI 생성 설정</h2>
           <p>{providerName} · {model}</p>
           <small>{settings.provider === 'ollama'
-            ? '로컬 Vinext 서버가 127.0.0.1:11434의 선택된 모델에 요청합니다.'
-            : 'OpenAI API가 프로젝트 입력을 바탕으로 가이드 초안을 생성합니다. 사용량에 따라 비용이 발생할 수 있습니다.'}</small>
+            ? '내 컴퓨터의 Ollama 모델로 생성합니다.'
+            : `${providerName}로 생성합니다. 사용량에 따른 비용이 발생할 수 있습니다.`}</small>
         </div>
         <div className="guide-generation-actions">
-          {project ? <a className="plain" href="#review-draft-title">상품 강점으로 리뷰 작성</a> : null}
           <button className="plain" type="button" onClick={onOpenSettings}>AI 연결 설정</button>
           <button className="primary" type="button" disabled={!ready || busy || !settingsReady} onClick={() => void generate()}>
             {busy ? 'AI가 안전한 테스트 항목을 구성하고 있어요…'
@@ -256,21 +270,24 @@ export default function GuideWorkspace({
           생성하려면 상품명, 상품 설명, 강조할 강점, 목표 고객층과 평가 항목을 입력해 주세요. 리뷰 CSV 분석은 선택 사항입니다.
         </p>}
       </section>
+      </details>
 
+      </div>
       {error && <div className="error" role="alert">{error}</div>}
       {storageError && <div className="error" role="alert">{storageError}</div>}
       {message && <div className="notice" role="status">{message}</div>}
 
+      <details id="guide-output" ref={outputSection} className="guide-section-disclosure guide-output-disclosure">
+        <summary><h2>C. 생성된 가이드 편집</h2><ChevronDown size={20} aria-hidden="true" /></summary>
       {guide && <section className="guide-editor">
         {stale && <div className="stale-notice" role="status">
           상품 정보, 평가 항목 또는 기존 리뷰 분석이 가이드 생성 이후 변경되었습니다. 기존 가이드는 보존되어 있으며 다시 생성하거나 직접 수정할 수 있습니다.
         </div>}
         <section className="dashboard-card">
           <div className="section-title">
-            <div><h2>C. 생성된 가이드 편집</h2>
-              <p>{guide.provider === 'openai' ? 'OpenAI' : guide.provider === 'ollama' ? 'Ollama' : '기존 저장 가이드'}
-                {guide.model ? ` · ${guide.model}` : ''} · 생성 {new Date(guide.generatedAt).toLocaleString('ko-KR')}
-                {guide.updatedAt ? ` · 수정 ${new Date(guide.updatedAt).toLocaleString('ko-KR')}` : ''}</p>
+            <div><p>{guide.provider === 'gemini' ? 'Gemini' : guide.provider === 'openai' ? 'OpenAI' : guide.provider === 'ollama' ? 'Ollama' : '기존 저장 가이드'}
+                {guide.model ? ` · ${guide.model}` : ''} · 생성 {new Date(guide.generatedAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}
+                {guide.updatedAt ? ` · 수정 ${new Date(guide.updatedAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}` : ''}</p>
             </div>
             <span className="badge">{stale ? '입력 변경됨' : '현재 입력 기준'}</span>
           </div>
@@ -281,7 +298,9 @@ export default function GuideWorkspace({
             <textarea rows={3} maxLength={1200} value={guide.purpose ?? ''}
               onChange={event => updateGuide({ purpose: event.target.value })} />
           </label>
-          {guide.testItems?.map((item, index) => <article className="guide-test-card" key={item.id}>
+          {guide.testItems?.map((item, index) => <details className="guide-test-card reading-test" key={item.id}>
+            <summary><span className="test-index">{String(index + 1).padStart(2, '0')}</span><span className="test-summary-copy"><strong>{item.title || '새 테스트 항목'}</strong><small>{item.required !== false ? '필수 평가' : '선택 평가'} · 체크리스트 {item.checklist.length}개</small></span><span className="expand-label">상세 편집</span></summary>
+            <div className="test-edit-body">
             <div className="guide-test-heading">
               <h3>테스트 {index + 1}</h3>
               <label className="guide-required-toggle">
@@ -323,15 +342,16 @@ export default function GuideWorkspace({
                   onChange={event => updateList(item.id, 'checklist', event.target.value)} />
               </label>
             </div>
-          </article>)}
+          </div></details>)}
           <button className="plain" type="button" onClick={addTestItem}><Plus size={16} />테스트 항목 추가</button>
-          <label className="guide-field writing-guidance">리뷰 작성 안내 <small>줄마다 한 항목</small>
+          <details className="reading-details"><summary>리뷰 작성 안내 편집 · {guide.writingGuidance?.length ?? 0}개</summary><label className="guide-field writing-guidance">리뷰 작성 안내 <small>줄마다 한 항목</small>
             <textarea rows={7} value={(guide.writingGuidance ?? []).join('\n')}
               onChange={event => {
                 const writingGuidance = splitLines(event.target.value);
                 updateGuide({ writingGuidance, content: writingGuidance.join('\n') });
               }} />
           </label>
+          </details>
           <div className="guide-safety-note">
             실제로 수행하지 않은 내용은 작성하지 않도록 안내하세요. 제품 제공·협찬 등 경제적 관계는 해당 플랫폼과 관련 기준에 맞게 공개해야 합니다.
           </div>
@@ -345,23 +365,23 @@ export default function GuideWorkspace({
         </section>
       </section>}
 
-      {project ? <ReviewDraftComposer key={project.id} project={project}
-        settings={settings} apiKey={apiKey} onOpenSettings={onOpenSettings}
-        onSave={onSaveComposition} onAdd={onAddComposedReview} onOpenInspection={onOpenInspection} /> : null}
+
 
       {project?.guide && !guide && <section className="dashboard-card guide-editor">
         <div className="stale-notice" role="status">이전에 저장된 가이드 형식입니다. 원본은 유지되며, 새 가이드를 생성할 때만 확인 후 교체합니다.</div>
-        <h2>{project.guide.title ?? '저장된 리뷰 가이드'}</h2>
+        <h3>{project.guide.title ?? '리뷰 가이드'}</h3>
         <p className="legacy-guide-content">{project.guide.editedContent ?? project.guide.content}</p>
         {!!project.guide.checklist.length && <ul>
           {project.guide.checklist.map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}
         </ul>}
       </section>}
 
-      {!project?.guide && <div className="empty guide-empty">
+      {!project?.guide && !guide && <div className="empty guide-empty">
         <strong>아직 생성된 가이드가 없습니다.</strong>
         <p>필수 상품 정보와 평가 항목을 준비하면 AI 가이드 초안을 만들 수 있습니다. 기존 고객 리뷰 분석이 없어도 생성할 수 있습니다.</p>
       </div>}
+      </details>
+
     </section>
   );
 }

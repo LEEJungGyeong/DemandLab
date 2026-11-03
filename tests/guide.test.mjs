@@ -234,3 +234,89 @@ test('guide Markdown download content contains product, test steps, writing guid
     testItems: [{ ...draft.testItems[0], id: 'item-1' }],
   }), /무선 이어폰/);
 });
+
+test('Gemini generates a project-ready guide through the existing validated endpoint', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    assert.ok(String(url).includes('gemini-3.5-flash-lite:generateContent'));
+    return response({ candidates: [{ content: { parts: [{ text: JSON.stringify(draft) }] } }] });
+  };
+  try {
+    const result = await generateGuide(request('http://localhost/api/generate-guide', { provider: 'gemini', key: 'fake-gemini-key', input }));
+    assert.equal(result.status, 200);
+    const { guide } = await result.json();
+    assert.equal(guide.provider, 'gemini');
+    assert.equal(guide.model, 'gemini-3.5-flash-lite');
+    assert.equal(guide.testItems.length, input.evaluationItems.length);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test('Gemini repairs a mismatched evaluation title once and requests the required guide schema', async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async (url, init) => {
+    calls++;
+    const body = JSON.parse(init.body);
+    assert.deepEqual(body.generationConfig.responseJsonSchema.properties.testItems.items.properties.title.enum, input.evaluationItems);
+    if (calls === 2) assert.ok(JSON.stringify(body).includes('평가 항목'));
+    const value = calls === 1 ? { ...draft, testItems: draft.testItems.map(item => ({ ...item, title: `${item.title} 테스트` })) } : draft;
+    return response({ candidates: [{ content: { parts: [{ text: JSON.stringify(value) }] } }] });
+  };
+  try {
+    const provider = createAIProvider('gemini', { model: 'gemini-3.5-flash-lite', apiKey: 'fake-key' });
+    const result = await provider.generateGuide({ task: 'guide-generation', input });
+    assert.equal(calls, 2);
+    assert.deepEqual(result.testItems.map(item => item.title), input.evaluationItems);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test('Gemini supplies application-owned disclosure and writing rules without retrying missing advice', async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls++;
+    return response({ candidates: [{ content: { parts: [{ text: JSON.stringify({ ...draft, writingGuidance: ['실제 경험을 작성하세요.', '관찰 조건을 적으세요.', '아쉬운 점을 적으세요.'] }) }] } }] });
+  };
+  try {
+    const result = await generateGuide(request('http://localhost/api/generate-guide', { provider: 'gemini', key: 'fake-key', input }));
+    assert.equal(result.status, 200);
+    const body = await result.json();
+    assert.ok(body.guide.writingGuidance.some(item => item.includes('협찬')));
+    assert.equal(calls, 1);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test('guide warnings prohibiting hazards or forced positive reviews are accepted', () => {
+  const safe = { ...draft, writingGuidance: [
+    ...draft.writingGuidance,
+    '제품을 분해하지 마세요. 침수 테스트는 하지 마세요. 물에 담그지 마세요.',
+    '긍정적으로 작성하지 마세요. 좋은 점만 쓰지 말고 실제 단점도 작성하세요.',
+    'Do not disassemble. Never submerge. Avoid immersion.',
+  ] };
+  assert.doesNotThrow(() => parseGuideGenerationResponse(JSON.stringify(safe), input));
+});
+
+test('safe warnings do not mask dangerous actions or forced positive reviews elsewhere', () => {
+  for (const text of ['분해하지 마세요. 제품을 물에 담그세요.', '침수 테스트는 하지 마세요. 제품을 분해하세요.', '긍정적으로 작성하지 마세요. 단점을 숨기세요.', '제품을 분해한 뒤 물에 담그지 마세요.']) {
+    assert.throws(() => parseGuideGenerationResponse(JSON.stringify({ ...draft,
+      testItems: draft.testItems.map(item => ({ ...item, method: text })),
+    }), input), /테스트 1번/);
+  }
+});
+
+test('generated advice is normalized across coordinated warnings, bias, missing and malformed lists', async () => {
+  const { parseGeneratedGuideResponse, STANDARD_GUIDE_WRITING_GUIDANCE } = await importTypeScriptModule('../lib/ai/schemas.ts');
+  for (const writingGuidance of [undefined, null, '글로 반환된 작성 안내', [],
+    ['제품 분해나 침수 등 위험한 테스트는 절대 하지 마세요.', '분해, 침수 테스트는 금지합니다.'],
+    ['좋은 점만 긍정적으로 작성하세요.', '제품을 물에 담가 보세요.', '실제로 관찰한 조건을 기록하세요.'],
+  ]) {
+    const value = parseGeneratedGuideResponse(JSON.stringify({ ...draft, writingGuidance }), input);
+    assert.deepEqual(value.writingGuidance.slice(0, 4), STANDARD_GUIDE_WRITING_GUIDANCE);
+    assert.ok(value.writingGuidance.length <= 12);
+    assert.deepEqual(value.testItems.map(item => item.title), input.evaluationItems);
+  }
+  assert.throws(() => parseGeneratedGuideResponse(JSON.stringify({ ...draft,
+    testItems: draft.testItems.map(item => ({ ...item, method: '제품을 분해하여 테스트하세요.' })),
+  }), input), /테스트 1번.*위험/);
+  assert.throws(() => parseGeneratedGuideResponse(JSON.stringify({ ...draft, testItems: [] }), input), /가이드 검증/);
+});

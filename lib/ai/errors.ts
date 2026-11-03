@@ -1,4 +1,5 @@
 export type AIErrorCode =
+  | 'gemini-error'
   | 'invalid-request'
   | 'missing-api-key'
   | 'openai-authentication'
@@ -19,15 +20,16 @@ export type AIErrorCode =
   | 'network-error';
 
 const messages: Record<AIErrorCode, string> = {
+  'gemini-error': 'Gemini 요청에 실패했습니다.',
   'invalid-request': 'AI 요청 형식이 올바르지 않습니다.',
-  'missing-api-key': 'OpenAI API 키를 입력한 뒤 연결을 확인해 주세요.',
+  'missing-api-key': 'AI API 키를 입력한 뒤 연결을 확인해 주세요.',
   'openai-authentication': 'OpenAI API 키가 올바르지 않거나 해당 요청 권한이 없습니다.',
   'openai-rate-limit': 'OpenAI 사용량 제한에 도달했습니다. 사용량과 결제 상태를 확인해 주세요.',
   'openai-model-error': '선택한 OpenAI 모델을 호출하지 못했습니다. 모델 이름과 계정의 모델 접근 권한을 확인해 주세요.',
   'provider-error': 'AI 제공자 요청에 실패했습니다. 모델과 제공자 상태를 확인해 주세요.',
   'ollama-unavailable': 'Ollama에 연결할 수 없습니다. Ollama를 실행하고 127.0.0.1:11434에서 응답하는지 확인해 주세요.',
   'ollama-model-missing': '선택한 Ollama 모델을 찾을 수 없습니다. 설치된 모델 목록을 새로고침해 주세요.',
-  'invalid-json': 'AI 응답을 JSON 형식으로 읽지 못했습니다. 다른 모델로 다시 시도해 주세요.',
+  'invalid-json': 'AI가 분석 결과를 올바른 JSON 형식으로 반환하지 않았습니다. CSV 파일 형식 오류가 아닙니다. 다시 분석하거나 다른 모델을 선택해 주세요.',
   'invalid-response': 'AI 응답에 필수 결과가 없거나 형식이 올바르지 않습니다.',
   'guide-product-missing': '가이드 생성에 필요한 상품명, 상품 설명, 강조할 강점, 목표 고객을 먼저 입력해 주세요.',
   'guide-evaluation-missing': '가이드에 포함할 핵심 평가 항목을 하나 이상 선택해 주세요.',

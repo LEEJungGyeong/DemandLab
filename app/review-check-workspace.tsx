@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useRef, useState } from 'react';
-import { AlertTriangle, ArrowLeft, Check, ClipboardList, FileSpreadsheet, Plus, RefreshCw, Trash2, Upload } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Check, ChevronDown, ClipboardList, FileSpreadsheet, Plus, RefreshCw, Trash2, Upload } from 'lucide-react';
 import type { AIProviderKind, AISettings } from '../lib/ai/types';
 import type {
   ProductProject, ReviewGuide, ReviewInspection, ReviewSubmission,
@@ -109,6 +109,7 @@ export default function ReviewCheckWorkspace({
   const [viewingPrevious, setViewingPrevious] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const busyRef = useRef(false);
+  const resultsSection = useRef<HTMLDetailsElement>(null);
 
   const guide = project?.guide;
   const usableGuide = isStructuredGuide(guide);
@@ -185,6 +186,7 @@ export default function ReviewCheckWorkspace({
     onSaveInputs(unique);
     setNotice(`${unique.length}건의 검수 초안을 현재 상품 프로젝트에 저장했습니다.`);
     setError('');
+    if (resultsSection.current) resultsSection.current.open = true;
     setSelectedId(unique[0].id);
     return true;
   }
@@ -273,7 +275,7 @@ export default function ReviewCheckWorkspace({
             body: JSON.stringify({
               provider: settings.provider,
               model: settings.models[settings.provider],
-              ...(settings.provider === 'openai' ? { key: apiKey } : {}),
+              ...(settings.provider !== 'ollama' ? { key: apiKey } : {}),
               input: {
                 product: {
                   name: project.productName || guide.productName || project.name,
@@ -351,11 +353,14 @@ export default function ReviewCheckWorkspace({
         </div>
       </div>
 
-      <section className="dashboard-card">
-        <div className="section-title">
-          <div><h2>A. 검수할 상품 프로젝트와 가이드</h2>
-            <p>이 화면의 리뷰단 초안은 기존 고객 리뷰 분석 데이터와 별도로 저장됩니다.</p></div>
-        </div>
+          {error && <div role="alert" className="error">{error}</div>}
+          {notice && <div role="status" className="notice">{notice}</div>}
+          {storageError && <div role="alert" className="error">{storageError}</div>}
+
+      <details className="guide-section-disclosure inspection-section-disclosure">
+        <summary><h2>A. 검수할 상품 프로젝트와 가이드</h2><ChevronDown size={20} aria-hidden="true" /></summary>
+        <section className="dashboard-card inspection-disclosure-body">
+        <p>이 화면의 리뷰단 초안은 기존 고객 리뷰 분석 데이터와 별도로 저장됩니다.</p>
         {project && <>
           <div className="inspection-product-summary"><b>{project.productName || project.name}</b>
             <span>{guide?.title || '저장된 리뷰 가이드 없음'}</span>
@@ -365,11 +370,11 @@ export default function ReviewCheckWorkspace({
           {usableGuide && <div className="inspection-ai-settings">
             <div>
               <span>선택된 검수 모델</span>
-              <strong>{settings.provider === 'openai' ? 'OpenAI' : 'Ollama'}
+              <strong>{settings.provider === 'gemini' ? 'Gemini' : settings.provider === 'openai' ? 'OpenAI' : 'Ollama'}
                 {' · '}{settings.models[settings.provider] || (settings.provider === 'openai' ? 'gpt-4.1-mini' : '모델 미선택')}</strong>
               <small>{settings.provider === 'ollama'
                 ? '로컬 개발 서버가 127.0.0.1:11434에 연결합니다. 서버가 실행 중인지 연결 설정에서 확인하세요.'
-                : 'OpenAI는 서버 API를 통해 호출합니다. 키는 현재 탭 메모리에만 유지됩니다.'}</small>
+                : '선택한 클라우드 AI는 서버 API를 통해 호출합니다. 입력한 키는 현재 탭 메모리에만 유지됩니다.'}</small>
             </div>
             <button className="plain" type="button" disabled={busy} onClick={onOpenSettings}>AI 연결 설정</button>
           </div>}
@@ -382,13 +387,15 @@ export default function ReviewCheckWorkspace({
           <p>구조화된 테스트 항목이 포함된 가이드를 먼저 생성하고 저장해 주세요.</p>
           <button className="primary" type="button" onClick={onOpenGuide}><ClipboardList size={15} />가이드 생성 화면으로 이동</button>
         </div>}
-      </section>
+        </section>
+      </details>
 
       {usableGuide && project && <>
         <section className="inspection-input-grid">
-          <section className="dashboard-card">
-            <div className="section-title"><div><h2>B. 리뷰 한 건 입력</h2>
-              <p>작성자 식별자는 선택 사항이며 개인 정보를 요구하지 않습니다.</p></div></div>
+          <details className="guide-section-disclosure inspection-section-disclosure">
+            <summary><h2>B. 리뷰 한 건 입력</h2><ChevronDown size={20} aria-hidden="true" /></summary>
+            <section className="dashboard-card inspection-disclosure-body">
+            <p>작성자 식별자는 선택 사항이며 개인 정보를 요구하지 않습니다.</p>
             <label className="inspection-field">작성자 이름 또는 ID <small>선택</small>
               <input value={authorId} maxLength={120} placeholder="예: reviewer-01"
                 onChange={event => setAuthorId(event.target.value)} />
@@ -402,11 +409,13 @@ export default function ReviewCheckWorkspace({
               <button className="primary" type="button" disabled={!singleText.trim() || busy}
                 onClick={addSingleReview}><Plus size={15} />검수 목록에 추가</button>
             </div>
-          </section>
+            </section>
+          </details>
 
-          <section className="dashboard-card">
-            <div className="section-title"><div><h2>C. 리뷰 CSV/TSV 일괄 추가</h2>
-              <p>UTF-8/EUC-KR, 최대 5MB · 최대 {MAX_PROJECT_REVIEWS}건 · 리뷰당 {MAX_REVIEW_LENGTH.toLocaleString()}자</p></div></div>
+          <details className="guide-section-disclosure inspection-section-disclosure">
+            <summary><h2>C. 리뷰 CSV/TSV 일괄 추가</h2><ChevronDown size={20} aria-hidden="true" /></summary>
+            <section className="dashboard-card inspection-disclosure-body">
+              <p>UTF-8/EUC-KR, 최대 5MB · 최대 {MAX_PROJECT_REVIEWS}건 · 리뷰당 {MAX_REVIEW_LENGTH.toLocaleString()}자</p>
             <div className="inspection-upload">
               <FileSpreadsheet size={22} />
               <span>{csvName || '리뷰단이 작성한 검수 대상 초안 파일을 선택하세요.'}</span>
@@ -444,12 +453,15 @@ export default function ReviewCheckWorkspace({
                 <Plus size={15} />검수 목록에 추가
               </button>
             </>}
-          </section>
+            </section>
+          </details>
         </section>
 
-        <section className="dashboard-card inspection-results-card">
+        <details ref={resultsSection} className="guide-section-disclosure inspection-section-disclosure">
+          <summary><h2>D. 검수 결과</h2><ChevronDown size={20} aria-hidden="true" /></summary>
+          <section className="dashboard-card inspection-results-card inspection-disclosure-body">
           <div className="section-title">
-            <div><h2>D. 검수 결과</h2><p>AI는 리뷰 진실성이나 실제 제품 사용 여부를 인증하지 않습니다.</p></div>
+            <p>AI는 리뷰 진실성이나 실제 제품 사용 여부를 인증하지 않습니다.</p>
             <button className="plain" type="button" disabled={!latestResults.length}
               onClick={exportResults}><FileSpreadsheet size={15} />결과 CSV 다운로드</button>
           </div>
@@ -491,9 +503,7 @@ export default function ReviewCheckWorkspace({
                 }
               }}><Trash2 size={14} />검수 자료 전체 삭제</button>}
           </div>
-          {error && <div role="alert" className="error">{error}</div>}
-          {notice && <div role="status" className="notice">{notice}</div>}
-          {storageError && <div role="alert" className="error">{storageError}</div>}
+
           {!project.productDescription.trim() && <div className="stale-notice">
             저장된 상품 설명이 없습니다. 상품 분석 화면에서 상품명과 설명을 준비해야 검수할 수 있습니다.
             <button className="plain" type="button" onClick={onBackToAnalysis}>상품 정보 입력으로 이동</button>
@@ -551,7 +561,7 @@ export default function ReviewCheckWorkspace({
                       <div className="inspection-detail-heading">
                         <div><span className={statusClass(selectedInspection.status)}>{selectedInspection.status}</span>
                           <h3>{selected.authorId || `리뷰 ${selected.id.slice(0, 8)}`}</h3>
-                          <small>{selectedInspection.provider === 'openai' ? 'OpenAI' : 'Ollama'} · {selectedInspection.model}
+                          <small>{selectedInspection.provider === 'gemini' ? 'Gemini' : selectedInspection.provider === 'openai' ? 'OpenAI' : 'Ollama'} · {selectedInspection.model}
                             {' · '}{new Date(selectedInspection.inspectedAt).toLocaleString('ko-KR')}</small></div>
                       </div>
                       <h4>리뷰 원문</h4>
@@ -587,7 +597,8 @@ export default function ReviewCheckWorkspace({
                     </div>}
             </div>
           </div>
-        </section>
+          </section>
+        </details>
       </>}
     </section>
   );

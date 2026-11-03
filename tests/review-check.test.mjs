@@ -331,3 +331,18 @@ test('inspection CSV is UTF-8 BOM, keeps CSV quoting and neutralizes spreadsheet
   assert.equal(rows[1][2], '\'=SUM(1,2), "quoted"\nsecond line');
   assert.match(rows[1][8], /배터리: 실제 시간, 설정을 작성/);
 });
+
+test('Gemini validates review inspections through the existing endpoint and preserves source quotes', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    assert.ok(String(url).includes('gemini-3.5-flash-lite:generateContent'));
+    return response({ candidates: [{ content: { parts: [{ text: JSON.stringify(modelResponse) }] } }] });
+  };
+  try {
+    const result = await checkReview(request('http://localhost/api/check-review', { provider: 'gemini', key: 'fake-gemini-key', input }));
+    assert.equal(result.status, 200);
+    const body = await result.json();
+    assert.equal(body.inspections[0].provider, 'gemini');
+    assert.equal(body.inspections[0].items[0].evidence, input.reviews[0].text);
+  } finally { globalThis.fetch = originalFetch; }
+});
